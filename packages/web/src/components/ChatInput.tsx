@@ -59,14 +59,25 @@ export default function ChatInput({
             onClick={onCreateCheckpoint}
             title="Create checkpoint"
           >
-            📌
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v8" />
+              <circle cx="12" cy="14" r="4" />
+              <path d="M12 18v4" />
+            </svg>
           </button>
           <button
             className="input-action-btn"
             onClick={onCreateBranch}
             title="Create branch"
           >
-            🌿
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="18" r="3" />
+              <circle cx="6" cy="6" r="3" />
+              <circle cx="18" cy="6" r="3" />
+              <path d="M12 15V9" />
+              <path d="M8.7 7.5 11 9" />
+              <path d="M15.3 7.5 13 9" />
+            </svg>
           </button>
           <button
             className="send-btn"
@@ -74,9 +85,9 @@ export default function ChatInput({
             disabled={!value.trim() || disabled}
             title="Send message"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
             </svg>
           </button>
         </div>

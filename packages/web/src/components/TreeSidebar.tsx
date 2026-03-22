@@ -12,6 +12,8 @@ interface TreeSidebarProps {
   onCreateBranch: () => void;
   onToggleTreeView: () => void;
   isTreeViewActive: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 type TabType = 'tree' | 'branches' | 'info';
@@ -26,6 +28,8 @@ export default function TreeSidebar({
   onCreateBranch,
   onToggleTreeView,
   isTreeViewActive,
+  collapsed,
+  onToggleCollapse,
 }: TreeSidebarProps) {
   const [activeTab, setActiveTab] = useState<TabType>('tree');
 
@@ -37,7 +41,6 @@ export default function TreeSidebar({
       .sort((a, b) => a.createdAt - b.createdAt);
   }, [checkpoints, activeBranchId]);
 
-  // Build timeline items: Start + checkpoints
   const timelineItems = useMemo(() => {
     const items: Array<{
       type: 'start' | 'checkpoint';
@@ -79,6 +82,52 @@ export default function TreeSidebar({
     return `${Math.floor(hours / 24)}d`;
   };
 
+  // Collapsed state — show only a thin strip with icons
+  if (collapsed) {
+    return (
+      <aside className="sidebar collapsed">
+        <button className="collapse-btn" onClick={onToggleCollapse} title="Expand sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </button>
+
+        <div className="collapsed-actions">
+          <button className="collapsed-icon-btn" onClick={onCreateCheckpoint} title="Create checkpoint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v8" />
+              <circle cx="12" cy="14" r="4" />
+              <path d="M12 18v4" />
+            </svg>
+          </button>
+          <button className="collapsed-icon-btn" onClick={onCreateBranch} title="Create branch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="18" r="3" />
+              <circle cx="6" cy="6" r="3" />
+              <circle cx="18" cy="6" r="3" />
+              <path d="M12 15V9" />
+              <path d="M8.7 7.5 11 9" />
+              <path d="M15.3 7.5 13 9" />
+            </svg>
+          </button>
+          <button
+            className={`collapsed-icon-btn ${isTreeViewActive ? 'active' : ''}`}
+            onClick={onToggleTreeView}
+            title={isTreeViewActive ? 'Show chat' : 'Full tree'}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="8" y="14" width="8" height="7" rx="1" />
+              <path d="M6.5 10v1.5a1.5 1.5 0 0 0 1.5 1.5h0" />
+              <path d="M17.5 10v1.5a1.5 1.5 0 0 1-1.5 1.5h0" />
+            </svg>
+          </button>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside className="sidebar">
       {/* Header */}
@@ -87,9 +136,16 @@ export default function TreeSidebar({
           <span className="sidebar-icon">▲</span>
           <span>Variantree</span>
         </div>
-        <div className="sidebar-status">
-          <span className="status-dot" />
-          <span className="status-label">live</span>
+        <div className="sidebar-header-right">
+          <div className="sidebar-status">
+            <span className="status-dot" />
+            <span className="status-label">live</span>
+          </div>
+          <button className="collapse-btn" onClick={onToggleCollapse} title="Collapse sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -195,16 +251,36 @@ export default function TreeSidebar({
       {/* Actions */}
       <div className="sidebar-actions">
         <button className="sidebar-btn" onClick={onCreateCheckpoint}>
-          <span className="btn-icon">📌</span> Checkpoint
+          <svg className="btn-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2v8" />
+            <circle cx="12" cy="14" r="4" />
+            <path d="M12 18v4" />
+          </svg>
+          Checkpoint
         </button>
         <button className="sidebar-btn" onClick={onCreateBranch}>
-          <span className="btn-icon">🌿</span> Branch
+          <svg className="btn-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="18" r="3" />
+            <circle cx="6" cy="6" r="3" />
+            <circle cx="18" cy="6" r="3" />
+            <path d="M12 15V9" />
+            <path d="M8.7 7.5 11 9" />
+            <path d="M15.3 7.5 13 9" />
+          </svg>
+          Branch
         </button>
         <button
           className={`sidebar-btn view-tree-btn ${isTreeViewActive ? 'active' : ''}`}
           onClick={onToggleTreeView}
         >
-          <span className="btn-icon">🗺️</span> {isTreeViewActive ? 'Chat' : 'Full Tree'}
+          <svg className="btn-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="8" y="14" width="8" height="7" rx="1" />
+            <path d="M6.5 10v1.5a1.5 1.5 0 0 0 1.5 1.5h0" />
+            <path d="M17.5 10v1.5a1.5 1.5 0 0 1-1.5 1.5h0" />
+          </svg>
+          {isTreeViewActive ? 'Chat' : 'Full Tree'}
         </button>
       </div>
     </aside>

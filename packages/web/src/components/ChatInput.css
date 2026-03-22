@@ -2,9 +2,8 @@
   padding: 16px 24px 20px;
   border-top: 1px solid var(--border);
   background: var(--bg-secondary);
-  max-width: 720px;
   width: 100%;
-  margin: 0 auto;
+  flex-shrink: 0;
 }
 
 .chat-input-wrapper {
@@ -16,6 +15,8 @@
   border-radius: var(--radius);
   padding: 8px 8px 8px 14px;
   transition: border-color 0.15s ease;
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 .chat-input-wrapper:focus-within {
@@ -50,16 +51,25 @@
 .input-action-btn {
   background: none;
   border: none;
-  font-size: 16px;
+  color: var(--text-faint);
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 6px;
   border-radius: var(--radius-sm);
   transition: all 0.12s ease;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .input-action-btn:hover {
   background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.input-action-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .send-btn {
@@ -83,4 +93,9 @@
 .send-btn:disabled {
   opacity: 0.2;
   cursor: not-allowed;
+}
+
+.send-btn svg {
+  width: 16px;
+  height: 16px;
 }
