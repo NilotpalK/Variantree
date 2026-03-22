@@ -90,7 +90,6 @@ export default function App() {
         checkpoints={engine.checkpoints}
         activeBranchId={engine.activeBranch?.id ?? null}
         onSwitchBranch={engine.switchBranch}
-        onDeleteBranch={handleDeleteBranch}
         onCreateCheckpoint={handleCreateCheckpoint}
         onCreateBranch={handleCreateBranch}
         onToggleTreeView={() => setShowTreeView(!showTreeView)}

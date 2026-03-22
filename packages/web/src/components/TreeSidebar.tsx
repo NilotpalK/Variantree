@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { Branch, Checkpoint } from '@variantree/core';
+import { getBranchColor, getBranchColorMuted } from '../utils/branchColors';
 import './TreeSidebar.css';
 
 interface TreeSidebarProps {
@@ -7,7 +8,6 @@ interface TreeSidebarProps {
   checkpoints: Checkpoint[];
   activeBranchId: string | null;
   onSwitchBranch: (branchId: string) => void;
-  onDeleteBranch: (branchId: string) => void;
   onCreateCheckpoint: () => void;
   onCreateBranch: () => void;
   onToggleTreeView: () => void;
@@ -16,14 +16,35 @@ interface TreeSidebarProps {
   onToggleCollapse: () => void;
 }
 
-type TabType = 'tree' | 'branches' | 'info';
+type TabType = 'tree' | 'info';
+
+function getRelativeTime(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function getRelativeTimeShort(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
 
 export default function TreeSidebar({
   branches,
   checkpoints,
   activeBranchId,
   onSwitchBranch,
-  onDeleteBranch,
   onCreateCheckpoint,
   onCreateBranch,
   onToggleTreeView,
@@ -32,57 +53,351 @@ export default function TreeSidebar({
   onToggleCollapse,
 }: TreeSidebarProps) {
   const [activeTab, setActiveTab] = useState<TabType>('tree');
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
+  const [hoveredBranchId, setHoveredBranchId] = useState<string | null>(null);
+  const hoverTimeoutRef = useRef<number | null>(null);
 
-  const activeBranch = branches.find((b) => b.id === activeBranchId);
-  const activeBranchCheckpoints = useMemo(() => {
-    if (!activeBranchId) return [];
-    return checkpoints
-      .filter((cp) => cp.branchId === activeBranchId)
-      .sort((a, b) => a.createdAt - b.createdAt);
-  }, [checkpoints, activeBranchId]);
+  const handleNodeMouseEnter = useCallback((branchId: string) => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setHoveredBranchId(branchId);
+  }, []);
 
-  const timelineItems = useMemo(() => {
-    const items: Array<{
-      type: 'start' | 'checkpoint';
-      label: string;
-      time: number;
-      id?: string;
-      isLive: boolean;
-    }> = [];
+  const handleMouseLeave = useCallback(() => {
+    hoverTimeoutRef.current = window.setTimeout(() => {
+      setHoveredBranchId(null);
+    }, 250);
+  }, []);
 
-    if (activeBranch) {
-      items.push({
-        type: 'start',
-        label: 'Start',
-        time: activeBranch.createdAt,
-        isLive: activeBranchCheckpoints.length === 0,
-      });
+  const handleCardMouseEnter = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+  }, []);
 
-      activeBranchCheckpoints.forEach((cp, index) => {
-        items.push({
-          type: 'checkpoint',
-          label: cp.label,
-          time: cp.createdAt,
-          id: cp.id,
-          isLive: index === activeBranchCheckpoints.length - 1,
-        });
-      });
+  const branchColorMap = useMemo(() => {
+    const map = new Map<string, number>();
+    branches.forEach((b, i) => map.set(b.id, i));
+    return map;
+  }, [branches]);
+
+  const activeBranchColorIndex = activeBranchId
+    ? branchColorMap.get(activeBranchId) ?? 0
+    : 0;
+
+  const hoveredBranch = hoveredBranchId
+    ? branches.find((b) => b.id === hoveredBranchId) ?? null
+    : null;
+
+  interface SidebarTreeNode {
+    branch: Branch & { isActive: boolean; messageCount: number };
+    children: SidebarTreeNode[];
+    colorIndex: number;
+  }
+
+  const treeRoots = useMemo(() => {
+    const childrenMap = new Map<string, Array<Branch & { isActive: boolean; messageCount: number }>>();
+
+    for (const branch of branches) {
+      if (branch.parentCheckpointId) {
+        const cp = checkpoints.find((c) => c.id === branch.parentCheckpointId);
+        if (cp) {
+          if (!childrenMap.has(cp.branchId)) {
+            childrenMap.set(cp.branchId, []);
+          }
+          childrenMap.get(cp.branchId)!.push(branch);
+        }
+      }
     }
 
-    return items;
-  }, [activeBranch, activeBranchCheckpoints]);
+    function buildTree(
+      branch: Branch & { isActive: boolean; messageCount: number },
+    ): SidebarTreeNode {
+      const childBranches = childrenMap.get(branch.id) || [];
+      const children = childBranches.map((child) => buildTree(child));
+      return {
+        branch,
+        children,
+        colorIndex: branchColorMap.get(branch.id) ?? 0,
+      };
+    }
 
-  const formatTimeAgo = (timestamp: number) => {
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
-    if (seconds < 60) return 'now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h`;
-    return `${Math.floor(hours / 24)}d`;
-  };
+    return branches
+      .filter((b) => b.parentCheckpointId === null)
+      .map((b) => buildTree(b));
+  }, [branches, checkpoints, branchColorMap]);
 
-  // Collapsed state — show only a thin strip with icons
+  const totalNodes = useMemo(() => {
+    let count = 0;
+    function walk(nodes: SidebarTreeNode[]) {
+      for (const n of nodes) {
+        count++;
+        walk(n.children);
+      }
+    }
+    walk(treeRoots);
+    return count;
+  }, [treeRoots]);
+
+  const sessionDuration = useMemo(() => {
+    if (branches.length === 0) return '0m';
+    const earliest = Math.min(...branches.map((b) => b.createdAt));
+    return getRelativeTimeShort(earliest);
+  }, [branches]);
+
+  function renderBranchNode(node: SidebarTreeNode) {
+    const color = getBranchColor(node.colorIndex);
+    const isActive = node.branch.id === activeBranchId;
+    const isHovered = node.branch.id === hoveredBranchId;
+    const hasChildren = node.children.length > 0;
+    const isCollapsed = collapsedNodes.has(node.branch.id);
+
+    const handleClick = () => {
+      if (hasChildren) {
+        setCollapsedNodes((prev) => {
+          const next = new Set(prev);
+          if (next.has(node.branch.id)) next.delete(node.branch.id);
+          else next.add(node.branch.id);
+          return next;
+        });
+      } else {
+        onSwitchBranch(node.branch.id);
+      }
+    };
+
+    return (
+      <div
+        key={node.branch.id}
+        className="branch-tree-node-wrapper"
+        style={{ '--node-color': color } as React.CSSProperties}
+      >
+        <div
+          className={`branch-tree-node ${isActive ? 'active' : ''} ${isHovered ? 'hovered' : ''}`}
+          onClick={handleClick}
+          onMouseEnter={() => handleNodeMouseEnter(node.branch.id)}
+          onMouseLeave={handleMouseLeave}
+        >
+          <span
+            className={`branch-tree-dot ${isActive ? 'active' : ''}`}
+            style={{
+              background: color,
+              boxShadow: isActive
+                ? `0 0 0 3px var(--bg-secondary), 0 0 0 5px ${getBranchColorMuted(node.colorIndex, 0.4)}, 0 0 10px ${getBranchColorMuted(node.colorIndex, 0.3)}`
+                : undefined,
+            }}
+          />
+          <span
+            className="branch-tree-name"
+            style={{ color }}
+          >
+            {node.branch.name}
+          </span>
+          {isActive ? (
+            <span
+              className="branch-tree-active-badge"
+              style={{
+                color,
+                background: getBranchColorMuted(node.colorIndex, 0.15),
+              }}
+            >
+              active
+            </span>
+          ) : (
+            <span className="branch-tree-time">
+              {getRelativeTimeShort(node.branch.createdAt)}
+            </span>
+          )}
+        </div>
+        {hasChildren && !isCollapsed && (
+          <div
+            className="branch-tree-children"
+            style={{
+              '--branch-line-color': color,
+            } as React.CSSProperties}
+          >
+            {node.children.map((child) => renderBranchNode(child))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderNodeDetailCard() {
+    if (!hoveredBranch) return null;
+
+    const colorIndex = branchColorMap.get(hoveredBranch.id) ?? 0;
+    const color = getBranchColor(colorIndex);
+    const isActive = hoveredBranch.id === activeBranchId;
+
+    let parentBranchName = '—';
+    if (hoveredBranch.parentCheckpointId) {
+      const parentCp = checkpoints.find((c) => c.id === hoveredBranch.parentCheckpointId);
+      if (parentCp) {
+        const parentBranch = branches.find((b) => b.id === parentCp.branchId);
+        if (parentBranch) parentBranchName = parentBranch.name;
+      }
+    }
+
+    const lastUserMsg = [...hoveredBranch.messages].reverse().find((m) => m.role === 'user');
+    const lastAssistantMsg = [...hoveredBranch.messages].reverse().find((m) => m.role === 'assistant');
+
+    const branchCheckpoints = checkpoints
+      .filter((cp) => cp.branchId === hoveredBranch.id)
+      .sort((a, b) => b.createdAt - a.createdAt);
+    const latestCp = branchCheckpoints[0] ?? null;
+
+    const parentCpDisplay = hoveredBranch.parentCheckpointId
+      ? hoveredBranch.parentCheckpointId.length > 10
+        ? hoveredBranch.parentCheckpointId.slice(0, 10)
+        : hoveredBranch.parentCheckpointId
+      : '—';
+
+    return (
+      <div
+        className="node-detail-card"
+        onMouseEnter={handleCardMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        <div className="node-detail-header">
+          <span
+            className={`node-detail-dot ${isActive ? 'active' : ''}`}
+            style={{
+              background: color,
+              boxShadow: isActive
+                ? `0 0 0 3px var(--bg-secondary), 0 0 0 5px ${getBranchColorMuted(colorIndex, 0.4)}`
+                : undefined,
+            }}
+          />
+          <span className="node-detail-name">{hoveredBranch.name}</span>
+          {isActive && (
+            <span
+              className="node-detail-badge"
+              style={{
+                color,
+                background: getBranchColorMuted(colorIndex, 0.15),
+              }}
+            >
+              active
+            </span>
+          )}
+        </div>
+
+        <div className="node-detail-stats">
+          <div className="node-detail-stat">
+            <span className="detail-stat-label">BRANCH</span>
+            <span className="detail-stat-value">{parentBranchName}</span>
+          </div>
+          <div className="node-detail-stat">
+            <span className="detail-stat-label">MESSAGES</span>
+            <span className="detail-stat-value">{hoveredBranch.messageCount} msgs</span>
+          </div>
+          <div className="node-detail-stat">
+            <span className="detail-stat-label">CREATED</span>
+            <span className="detail-stat-value">{getRelativeTime(hoveredBranch.createdAt)}</span>
+          </div>
+        </div>
+
+        {(lastUserMsg || lastAssistantMsg) && (
+          <div className="node-detail-exchange">
+            <div className="detail-section-label">LAST EXCHANGE</div>
+            {lastUserMsg && (
+              <div className="exchange-message">
+                <span className="exchange-role you">YOU</span>
+                <p className="exchange-text">
+                  {lastUserMsg.content.length > 100
+                    ? lastUserMsg.content.slice(0, 100) + '...'
+                    : lastUserMsg.content}
+                </p>
+              </div>
+            )}
+            {lastAssistantMsg && (
+              <div className="exchange-message">
+                <span className="exchange-role claude">CLAUDE</span>
+                <p className="exchange-text">
+                  {lastAssistantMsg.content.length > 100
+                    ? lastAssistantMsg.content.slice(0, 100) + '...'
+                    : lastAssistantMsg.content}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="node-detail-actions">
+          <button
+            className="detail-action-btn primary"
+            onClick={() => {
+              onSwitchBranch(hoveredBranch.id);
+              onCreateBranch();
+              setHoveredBranchId(null);
+            }}
+          >
+            <svg className="detail-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="18" r="3" />
+              <circle cx="6" cy="6" r="3" />
+              <circle cx="18" cy="6" r="3" />
+              <path d="M12 15V9" />
+              <path d="M8.7 7.5 11 9" />
+              <path d="M15.3 7.5 13 9" />
+            </svg>
+            Branch
+          </button>
+          <button
+            className="detail-action-btn secondary"
+            onClick={() => {
+              onSwitchBranch(hoveredBranch.id);
+              setHoveredBranchId(null);
+            }}
+          >
+            <svg className="detail-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+            Restore
+          </button>
+        </div>
+
+        {latestCp ? (
+          <div className="node-detail-checkpoint">
+            <div className="detail-section-label">CHECKPOINT INFO</div>
+            <div className="checkpoint-row">
+              <span className="checkpoint-key">ID</span>
+              <span className="checkpoint-val">
+                {latestCp.id.length > 10 ? latestCp.id.slice(0, 10) : latestCp.id}
+              </span>
+            </div>
+            <div className="checkpoint-row">
+              <span className="checkpoint-key">Parent</span>
+              <span className="checkpoint-val">{parentCpDisplay}</span>
+            </div>
+            {latestCp.metadata?.tokens != null && (
+              <div className="checkpoint-row">
+                <span className="checkpoint-key">Tokens</span>
+                <span className="checkpoint-val">~{String(latestCp.metadata.tokens)}</span>
+              </div>
+            )}
+            {latestCp.metadata?.provider != null && (
+              <div className="checkpoint-row">
+                <span className="checkpoint-key">Provider</span>
+                <span className="checkpoint-val">{String(latestCp.metadata.provider)}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="node-detail-checkpoint">
+            <div className="detail-section-label">CHECKPOINT INFO</div>
+            <p className="checkpoint-empty">No checkpoints on this branch</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const activeBranchColor = getBranchColor(activeBranchColorIndex);
+
   if (collapsed) {
     return (
       <aside className="sidebar collapsed">
@@ -138,8 +453,8 @@ export default function TreeSidebar({
         </div>
         <div className="sidebar-header-right">
           <div className="sidebar-status">
-            <span className="status-dot" />
-            <span className="status-label">live</span>
+            <span className="status-dot" style={{ background: activeBranchColor }} />
+            <span className="status-label" style={{ color: activeBranchColor }}>live</span>
           </div>
           <button className="collapse-btn" onClick={onToggleCollapse} title="Collapse sidebar">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -151,7 +466,7 @@ export default function TreeSidebar({
 
       {/* Tabs */}
       <div className="sidebar-tabs">
-        {(['tree', 'branches', 'info'] as TabType[]).map((tab) => (
+        {(['tree', 'info'] as TabType[]).map((tab) => (
           <button
             key={tab}
             className={`sidebar-tab ${activeTab === tab ? 'active' : ''}`}
@@ -165,64 +480,8 @@ export default function TreeSidebar({
       {/* Content */}
       <div className="sidebar-content">
         {activeTab === 'tree' && (
-          <div className="timeline-view">
-            <div className="session-label">
-              SESSION · {activeBranch?.name.toUpperCase() ?? 'MAIN'}
-            </div>
-
-            <div className="timeline">
-              {timelineItems.map((item, index) => (
-                <div
-                  key={item.id ?? `start-${index}`}
-                  className={`timeline-item ${item.isLive ? 'live' : ''}`}
-                >
-                  <div className="timeline-connector">
-                    <span className={`timeline-dot ${item.isLive ? 'live' : ''}`} />
-                    {index < timelineItems.length - 1 && (
-                      <span className="timeline-line" />
-                    )}
-                  </div>
-                  <div className="timeline-content">
-                    <span className="timeline-label">{item.label}</span>
-                    <div className="timeline-meta">
-                      <span className="timeline-time">{formatTimeAgo(item.time)}</span>
-                      {item.isLive && <span className="live-badge">live</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'branches' && (
-          <div className="branches-list">
-            {branches.map((branch) => (
-              <div
-                key={branch.id}
-                className={`branch-item ${branch.isActive ? 'active' : ''}`}
-                onClick={() => onSwitchBranch(branch.id)}
-              >
-                <div className="branch-info">
-                  <span className={`branch-dot ${branch.isActive ? 'active' : ''}`} />
-                  <span className="branch-name">{branch.name}</span>
-                </div>
-                <div className="branch-meta">
-                  <span className="branch-count">{branch.messageCount} msgs</span>
-                  {branch.name !== 'main' && !branch.isActive && (
-                    <button
-                      className="branch-delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteBranch(branch.id);
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="branch-tree">
+            {treeRoots.map((root) => renderBranchNode(root))}
           </div>
         )}
 
@@ -230,7 +489,9 @@ export default function TreeSidebar({
           <div className="info-view">
             <div className="info-item">
               <span className="info-label">Active Branch</span>
-              <span className="info-value">{activeBranch?.name ?? '—'}</span>
+              <span className="info-value" style={{ color: activeBranchColor }}>
+                {branches.find((b) => b.id === activeBranchId)?.name ?? '—'}
+              </span>
             </div>
             <div className="info-item">
               <span className="info-label">Total Branches</span>
@@ -242,11 +503,29 @@ export default function TreeSidebar({
             </div>
             <div className="info-item">
               <span className="info-label">Messages (this branch)</span>
-              <span className="info-value">{activeBranch?.messageCount ?? 0}</span>
+              <span className="info-value">{branches.find((b) => b.id === activeBranchId)?.messageCount ?? 0}</span>
             </div>
           </div>
         )}
       </div>
+
+      {/* Tree stats bar */}
+      {activeTab === 'tree' && (
+        <div className="tree-stats-bar">
+          <div className="tree-stat">
+            <span className="tree-stat-value">{totalNodes}</span>
+            <span className="tree-stat-label">NODES</span>
+          </div>
+          <div className="tree-stat">
+            <span className="tree-stat-value">{branches.length}</span>
+            <span className="tree-stat-label">BRANCHES</span>
+          </div>
+          <div className="tree-stat">
+            <span className="tree-stat-value">{sessionDuration}</span>
+            <span className="tree-stat-label">SESSION</span>
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="sidebar-actions">
@@ -283,6 +562,9 @@ export default function TreeSidebar({
           {isTreeViewActive ? 'Chat' : 'Full Tree'}
         </button>
       </div>
+
+      {/* Floating detail card on hover */}
+      {hoveredBranch && renderNodeDetailCard()}
     </aside>
   );
 }

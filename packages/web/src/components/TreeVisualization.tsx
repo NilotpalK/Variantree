@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Branch, Checkpoint } from '@variantree/core';
+import { getBranchColor, getBranchColorMuted } from '../utils/branchColors';
 import './TreeVisualization.css';
 
 interface TreeVisualizationProps {
@@ -13,6 +14,7 @@ interface TreeNode {
   children: TreeNode[];
   x: number;
   y: number;
+  colorIndex: number;
 }
 
 const NODE_WIDTH = 160;
@@ -25,9 +27,15 @@ export default function TreeVisualization({
   checkpoints,
   onSwitchBranch,
 }: TreeVisualizationProps) {
+  // Build a color map: branch id → index
+  const branchColorMap = useMemo(() => {
+    const map = new Map<string, number>();
+    branches.forEach((b, i) => map.set(b.id, i));
+    return map;
+  }, [branches]);
+
   // Build tree structure and calculate positions
   const { nodes, connections, svgWidth, svgHeight } = useMemo(() => {
-    // Find parent branch for each branch via checkpoints
     const childrenMap = new Map<string, Branch[]>();
 
     for (const branch of branches) {
@@ -42,16 +50,20 @@ export default function TreeVisualization({
       }
     }
 
-    // Build tree recursively
     function buildTree(
       branch: Branch & { isActive: boolean; messageCount: number },
     ): TreeNode {
       const childBranches = (childrenMap.get(branch.id) || []) as Array<Branch & { isActive: boolean; messageCount: number }>;
       const children = childBranches.map((child) => buildTree(child));
-      return { branch, children, x: 0, y: 0 };
+      return {
+        branch,
+        children,
+        x: 0,
+        y: 0,
+        colorIndex: branchColorMap.get(branch.id) ?? 0,
+      };
     }
 
-    // Find root branches and build tree
     const roots = branches
       .filter((b) => b.parentCheckpointId === null)
       .map((b) => buildTree(b));
@@ -60,7 +72,6 @@ export default function TreeVisualization({
       return { nodes: [], connections: [], svgWidth: 0, svgHeight: 0 };
     }
 
-    // Position nodes using a simple layout algorithm
     let nextX = 0;
 
     function layoutTree(node: TreeNode, depth: number): void {
@@ -72,10 +83,8 @@ export default function TreeVisualization({
         return;
       }
 
-      // Layout children first
       node.children.forEach((child) => layoutTree(child, depth + 1));
 
-      // Center parent above children
       const firstChild = node.children[0];
       const lastChild = node.children[node.children.length - 1];
       node.x = (firstChild.x + lastChild.x) / 2;
@@ -83,13 +92,13 @@ export default function TreeVisualization({
 
     roots.forEach((root) => layoutTree(root, 0));
 
-    // Flatten tree to get all nodes and connections
     const allNodes: TreeNode[] = [];
     const allConnections: Array<{
       fromX: number;
       fromY: number;
       toX: number;
       toY: number;
+      colorIndex: number;
     }> = [];
 
     function flatten(node: TreeNode): void {
@@ -100,6 +109,7 @@ export default function TreeVisualization({
           fromY: node.y + NODE_HEIGHT,
           toX: child.x + NODE_WIDTH / 2,
           toY: child.y,
+          colorIndex: node.colorIndex,
         });
         flatten(child);
       });
@@ -107,7 +117,6 @@ export default function TreeVisualization({
 
     roots.forEach((root) => flatten(root));
 
-    // Calculate SVG dimensions
     const maxX = Math.max(...allNodes.map((n) => n.x)) + NODE_WIDTH;
     const maxY = Math.max(...allNodes.map((n) => n.y)) + NODE_HEIGHT;
 
@@ -117,7 +126,7 @@ export default function TreeVisualization({
       svgWidth: maxX + 80,
       svgHeight: maxY + 80,
     };
-  }, [branches, checkpoints]);
+  }, [branches, checkpoints, branchColorMap]);
 
   if (nodes.length === 0) {
     return (
@@ -142,57 +151,72 @@ export default function TreeVisualization({
           height={svgHeight}
           viewBox={`-40 -20 ${svgWidth} ${svgHeight}`}
         >
-          {/* Connections */}
+          {/* Connections — colored by parent branch */}
           {connections.map((conn, i) => {
             const midY = (conn.fromY + conn.toY) / 2;
+            const color = getBranchColor(conn.colorIndex);
             return (
               <path
                 key={`conn-${i}`}
                 d={`M ${conn.fromX} ${conn.fromY} C ${conn.fromX} ${midY}, ${conn.toX} ${midY}, ${conn.toX} ${conn.toY}`}
-                className="tree-connection"
+                fill="none"
+                stroke={color}
+                strokeWidth={2}
+                strokeOpacity={0.4}
               />
             );
           })}
 
-          {/* Nodes */}
+          {/* Nodes — colored by branch */}
           {nodes.map((node) => {
             const branchCheckpoints = checkpoints.filter(
               (cp) => cp.branchId === node.branch.id
             );
+            const color = getBranchColor(node.colorIndex);
+            const muted = getBranchColorMuted(node.colorIndex, 0.08);
+            const mutedBorder = getBranchColorMuted(node.colorIndex, 0.3);
+
             return (
               <g
                 key={node.branch.id}
-                className={`tree-node-group ${node.branch.isActive ? 'active' : ''}`}
+                className="tree-node-group"
                 onClick={() => onSwitchBranch(node.branch.id)}
                 style={{ cursor: 'pointer' }}
               >
+                {/* Node background */}
                 <rect
                   x={node.x}
                   y={node.y}
                   width={NODE_WIDTH}
                   height={NODE_HEIGHT}
                   rx={8}
-                  className={`tree-node-rect ${node.branch.isActive ? 'active' : ''}`}
+                  fill={node.branch.isActive ? muted : 'var(--bg-elevated)'}
+                  stroke={node.branch.isActive ? color : mutedBorder}
+                  strokeWidth={node.branch.isActive ? 1.5 : 1}
+                  className="tree-node-rect"
                 />
+
+
 
                 {/* Branch name */}
                 <text
-                  x={node.x + NODE_WIDTH / 2}
+                  x={node.x + 14}
                   y={node.y + 22}
                   className="tree-node-label"
-                  textAnchor="middle"
+                  textAnchor="start"
+                  fill={node.branch.isActive ? color : 'var(--text-primary)'}
                 >
-                  {node.branch.name.length > 16
-                    ? node.branch.name.slice(0, 14) + '…'
+                  {node.branch.name.length > 14
+                    ? node.branch.name.slice(0, 12) + '…'
                     : node.branch.name}
                 </text>
 
                 {/* Meta info */}
                 <text
-                  x={node.x + NODE_WIDTH / 2}
+                  x={node.x + 14}
                   y={node.y + 40}
                   className="tree-node-meta-text"
-                  textAnchor="middle"
+                  textAnchor="start"
                 >
                   {node.branch.messageCount} msgs
                   {branchCheckpoints.length > 0
@@ -200,13 +224,14 @@ export default function TreeVisualization({
                     : ''}
                 </text>
 
-                {/* Active indicator */}
+                {/* Active indicator dot */}
                 {node.branch.isActive && (
                   <circle
-                    cx={node.x + NODE_WIDTH - 12}
-                    cy={node.y + 12}
+                    cx={node.x + NODE_WIDTH - 14}
+                    cy={node.y + NODE_HEIGHT / 2}
                     r={4}
-                    className="tree-node-active-dot"
+                    fill={color}
+                    style={{ filter: `drop-shadow(0 0 4px ${color})` }}
                   />
                 )}
               </g>

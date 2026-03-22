@@ -46,49 +46,22 @@
 
 /* ─── SVG Styling ─────────────────────────────────────── */
 
-.tree-connection {
-  fill: none;
-  stroke: var(--border);
-  stroke-width: 1.5;
-  transition: stroke 0.2s ease;
-}
-
 .tree-node-rect {
-  fill: var(--bg-elevated);
-  stroke: var(--border);
-  stroke-width: 1;
   transition: all 0.15s ease;
 }
 
-.tree-node-rect.active {
-  stroke: var(--text-primary);
-  stroke-width: 1.5;
-  fill: var(--bg-active);
-}
-
 .tree-node-group:hover .tree-node-rect {
-  fill: var(--bg-hover);
-  stroke: var(--text-faint);
-}
-
-.tree-node-group.active:hover .tree-node-rect {
-  fill: var(--bg-active);
-  stroke: var(--text-primary);
+  filter: brightness(1.3);
 }
 
 .tree-node-label {
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
-  fill: var(--text-primary);
 }
 
 .tree-node-meta-text {
   font-family: var(--font-sans);
   font-size: 11px;
   fill: var(--text-muted);
-}
-
-.tree-node-active-dot {
-  fill: var(--green);
 }
