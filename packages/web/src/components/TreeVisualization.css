@@ -1,0 +1,67 @@
+.tree-viz-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+}
+
+.tree-viz-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-secondary);
+}
+
+.tree-viz-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.tree-viz-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tree-viz-canvas {
+  flex: 1;
+  overflow: auto;
+  padding: 40px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.tree-viz-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+/* ─── SVG Styling ─────────────────────────────────────── */
+
+.tree-node-rect {
+  transition: all 0.15s ease;
+}
+
+.tree-node-group:hover .tree-node-rect {
+  filter: brightness(1.3);
+}
+
+.tree-node-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tree-node-meta-text {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  fill: var(--text-muted);
+}
