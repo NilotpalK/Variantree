@@ -14,9 +14,11 @@ interface TreeSidebarProps {
   isTreeViewActive: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  onCheckpointClick: (messageIndex: number) => void;
+  onBranchFromCheckpoint: (checkpointId: string) => void;
 }
 
-type TabType = 'tree' | 'info';
+type TabType = 'tree' | 'checkpoints' | 'info';
 
 function getRelativeTime(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -51,6 +53,8 @@ export default function TreeSidebar({
   isTreeViewActive,
   collapsed,
   onToggleCollapse,
+  onCheckpointClick,
+  onBranchFromCheckpoint,
 }: TreeSidebarProps) {
   const [activeTab, setActiveTab] = useState<TabType>('tree');
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
@@ -466,7 +470,7 @@ export default function TreeSidebar({
 
       {/* Tabs */}
       <div className="sidebar-tabs">
-        {(['tree', 'info'] as TabType[]).map((tab) => (
+        {(['tree', 'checkpoints', 'info'] as TabType[]).map((tab) => (
           <button
             key={tab}
             className={`sidebar-tab ${activeTab === tab ? 'active' : ''}`}
@@ -484,6 +488,114 @@ export default function TreeSidebar({
             {treeRoots.map((root) => renderBranchNode(root))}
           </div>
         )}
+
+        {activeTab === 'checkpoints' && (() => {
+          const activeBranch = branches.find((b) => b.id === activeBranchId);
+          const activeCps = checkpoints
+            .filter((cp) => cp.branchId === activeBranchId)
+            .sort((a, b) => a.createdAt - b.createdAt);
+
+          if (!activeBranch) return <div className="timeline-empty">No active branch</div>;
+
+          return (
+            <div className="cp-timeline" style={{ '--tl-color': activeBranchColor } as React.CSSProperties}>
+
+              {/* Start node */}
+              <div className="cp-tl-item">
+                <div className="cp-tl-rail">
+                  <span className="cp-tl-dot start" style={{ background: activeBranchColor }} />
+                  <span className="cp-tl-line" />
+                </div>
+                <div className="cp-tl-body">
+                  <span className="cp-tl-label muted">Start</span>
+                  <span className="cp-tl-time">{getRelativeTime(activeBranch.createdAt)}</span>
+                </div>
+              </div>
+
+              {/* Checkpoint nodes */}
+              {activeCps.map((cp) => {
+                const childBranches = branches.filter((b) => b.parentCheckpointId === cp.id);
+                return (
+                  <div key={cp.id} className="cp-tl-item cp-tl-item--clickable" onClick={() => onCheckpointClick(cp.messageIndex)}>
+                    <div className="cp-tl-rail">
+                      {/* Bookmark icon */}
+                      <svg className="cp-tl-bookmark" style={{ color: activeBranchColor }} viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M5 3a2 2 0 0 0-2 2v16l9-4 9 4V5a2 2 0 0 0-2-2H5z" />
+                      </svg>
+                      <span className="cp-tl-line" />
+                    </div>
+                    <div className="cp-tl-body">
+                      <span className="cp-tl-label">{cp.label}</span>
+                      <div className="cp-tl-meta">
+                        <span className="cp-tl-time">{getRelativeTime(cp.createdAt)}</span>
+                        {childBranches.map((cb) => {
+                          const cbColorIndex = branchColorMap.get(cb.id) ?? 0;
+                          const cbColor = getBranchColor(cbColorIndex);
+                          return (
+                            <button
+                              key={cb.id}
+                              className="cp-tl-branch-pill"
+                              style={{
+                                color: cbColor,
+                                background: getBranchColorMuted(cbColorIndex, 0.15),
+                                borderColor: getBranchColorMuted(cbColorIndex, 0.3),
+                              }}
+                              onClick={(e) => { e.stopPropagation(); onSwitchBranch(cb.id); }}
+                              title={`Switch to branch: ${cb.name}`}
+                            >
+                              {cb.name} →
+                            </button>
+                          );
+                        })}
+                        <button
+                          className="cp-tl-branch-btn"
+                          onClick={(e) => { e.stopPropagation(); onBranchFromCheckpoint(cp.id); }}
+                          title="Create a new branch from this checkpoint"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="18" r="3" />
+                            <circle cx="6" cy="6" r="3" />
+                            <circle cx="18" cy="6" r="3" />
+                            <path d="M12 15V9" />
+                            <path d="M8.7 7.5 11 9" />
+                            <path d="M15.3 7.5 13 9" />
+                          </svg>
+                          Branch
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Now / live node */}
+              <div className="cp-tl-item">
+                <div className="cp-tl-rail">
+                  <span
+                    className="cp-tl-dot live"
+                    style={{
+                      background: activeBranchColor,
+                      boxShadow: `0 0 0 3px var(--bg-secondary), 0 0 0 5px ${getBranchColorMuted(activeBranchColorIndex, 0.4)}, 0 0 12px ${getBranchColorMuted(activeBranchColorIndex, 0.3)}`,
+                    }}
+                  />
+                </div>
+                <div className="cp-tl-body">
+                  <span className="cp-tl-label" style={{ color: activeBranchColor, fontWeight: 600 }}>Now</span>
+                  <span
+                    className="cp-tl-live-badge"
+                    style={{
+                      color: activeBranchColor,
+                      background: getBranchColorMuted(activeBranchColorIndex, 0.15),
+                    }}
+                  >
+                    live
+                  </span>
+                </div>
+              </div>
+
+            </div>
+          );
+        })()}
 
         {activeTab === 'info' && (
           <div className="info-view">

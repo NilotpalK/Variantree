@@ -11,11 +11,13 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [showTreeView, setShowTreeView] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [scrollTarget, setScrollTarget] = useState<number | null>(null);
 
   // Modal state
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     type: 'checkpoint' | 'branch';
+    targetCheckpointId?: string;
   }>({ isOpen: false, type: 'checkpoint' });
 
   const handleSendMessage = async (content: string) => {
@@ -35,13 +37,18 @@ export default function App() {
     setModalConfig({ isOpen: true, type: 'branch' });
   };
 
+  const handleBranchFromCheckpoint = (checkpointId: string) => {
+    setModalConfig({ isOpen: true, type: 'branch', targetCheckpointId: checkpointId });
+  };
+
   const handleModalConfirm = async (value: string) => {
-    setModalConfig({ isOpen: false, type: modalConfig.type });
-    if (modalConfig.type === 'checkpoint') {
+    const { type, targetCheckpointId } = modalConfig;
+    setModalConfig({ isOpen: false, type });
+    if (type === 'checkpoint') {
       await engine.createCheckpoint(value);
     } else {
       try {
-        await engine.branch(value);
+        await engine.branch(value, targetCheckpointId);
       } catch (err: any) {
         alert(err.message);
       }
@@ -61,6 +68,21 @@ export default function App() {
     } catch (err: any) {
       alert(err.message);
     }
+  };
+
+  /**
+   * Checkpoint click → scroll the chat to that message.
+   * messageIndex is relative to the branch's own messages.
+   * The full context = parentMessages + branchMessages, so the
+   * absolute index = (context.length - activeBranchMessages) + messageIndex.
+   */
+  const handleCheckpointClick = (messageIndex: number) => {
+    const activeBranch = engine.activeBranch;
+    if (!activeBranch) return;
+    const parentOffset = engine.context.length - activeBranch.messages.length;
+    const absoluteIndex = parentOffset + messageIndex;
+    // Toggle: clicking the same checkpoint again clears highlight
+    setScrollTarget((prev) => (prev === absoluteIndex ? null : absoluteIndex));
   };
 
   // Modal icons
@@ -96,6 +118,8 @@ export default function App() {
         isTreeViewActive={showTreeView}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onCheckpointClick={handleCheckpointClick}
+        onBranchFromCheckpoint={handleBranchFromCheckpoint}
       />
 
       {showTreeView ? (
@@ -114,6 +138,7 @@ export default function App() {
             ancestry={engine.ancestry}
             branches={engine.branches}
             activeBranch={engine.activeBranch}
+            scrollToMessageIndex={scrollTarget}
           />
           <ChatInput
             onSendMessage={handleSendMessage}
@@ -141,3 +166,4 @@ export default function App() {
     </div>
   );
 }
+
