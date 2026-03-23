@@ -71,6 +71,78 @@ export interface Checkpoint {
   createdAt: number;
   /** Extensible metadata (e.g., future code snapshot references) */
   metadata?: Record<string, unknown>;
+  /** Optional code snapshot — full workspace state at this checkpoint */
+  snapshot?: Snapshot;
+}
+
+// ─── Code Snapshots ──────────────────────────────────────────────────────────
+
+/**
+ * A single file entry in a snapshot.
+ * Stores the file path and the content hash (blob reference).
+ */
+export interface FileEntry {
+  /** Relative path from workspace root (e.g., "src/auth.ts") */
+  path: string;
+  /** SHA-256 hash of the file contents — used as blob key */
+  hash: string;
+  /** File size in bytes */
+  size: number;
+}
+
+/**
+ * A snapshot is a complete manifest of every file in the workspace
+ * at a specific point in time. The actual file contents are stored
+ * as blobs in a SnapshotStorage backend, keyed by their content hash.
+ */
+export interface Snapshot {
+  /** All files in the workspace at this point */
+  files: FileEntry[];
+  /** Total number of files */
+  fileCount: number;
+  /** Total size of all files in bytes */
+  totalSize: number;
+  /** Unix timestamp (ms) when the snapshot was taken */
+  createdAt: number;
+}
+
+/**
+ * Abstract blob storage for file snapshots.
+ *
+ * Content-addressable: blobs are stored by their SHA-256 hash.
+ * Duplicate content is stored only once (deduplication).
+ *
+ * Implement this for your environment:
+ *   - IDE extension: write blobs to `.variantree/blobs/` on disk
+ *   - Browser: store in IndexedDB via Dexie
+ */
+export interface SnapshotStorage {
+  /** Store a blob. If the hash already exists, this is a no-op. */
+  writeBlob(hash: string, content: Buffer | Uint8Array): Promise<void>;
+  /** Read a blob by its content hash. Returns null if not found. */
+  readBlob(hash: string): Promise<Buffer | Uint8Array | null>;
+  /** Check if a blob exists (avoids re-storing unchanged files). */
+  hasBlob(hash: string): Promise<boolean>;
+  /** Delete a blob (used during garbage collection). */
+  deleteBlob(hash: string): Promise<void>;
+}
+
+/**
+ * Abstract filesystem adapter for reading/writing workspace files.
+ *
+ * Implement this for your environment:
+ *   - IDE extension: use Node.js `fs` module
+ *   - Browser: use File System Access API
+ */
+export interface FileSystemAdapter {
+  /** List all file paths in the workspace (relative paths, respecting ignores). */
+  listFiles(rootPath: string): Promise<string[]>;
+  /** Read a file's contents as bytes. */
+  readFile(filePath: string): Promise<Buffer | Uint8Array>;
+  /** Write bytes to a file (creating directories as needed). */
+  writeFile(filePath: string, content: Buffer | Uint8Array): Promise<void>;
+  /** Delete a file. */
+  deleteFile(filePath: string): Promise<void>;
 }
 
 // ─── Workspace ───────────────────────────────────────────────────────────────
@@ -123,4 +195,9 @@ export interface StorageBackend {
 export interface VariantTreeOptions {
   /** Storage backend to use for persistence */
   storage: StorageBackend;
+  /** Optional: snapshot storage for code save points */
+  snapshotStorage?: SnapshotStorage;
+  /** Optional: filesystem adapter for reading/writing workspace files */
+  fileSystem?: FileSystemAdapter;
 }
+

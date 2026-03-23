@@ -34,17 +34,24 @@ import {
   Checkpoint,
   Message,
   StorageBackend,
+  SnapshotStorage,
+  FileSystemAdapter,
   VariantTreeOptions,
 } from './types';
 import { resolveContext, getBranchAncestry } from './context';
+import { createSnapshot, restoreSnapshot } from './snapshot';
 import { generateId, hashContent, now } from './utils';
 
 export class VariantTree {
   private storage: StorageBackend;
+  private snapshotStorage: SnapshotStorage | null;
+  private fileSystem: FileSystemAdapter | null;
   private workspace: Workspace | null = null;
 
   constructor(options: VariantTreeOptions) {
     this.storage = options.storage;
+    this.snapshotStorage = options.snapshotStorage ?? null;
+    this.fileSystem = options.fileSystem ?? null;
   }
 
   // ─── Workspace Management ────────────────────────────────────────────────
@@ -156,13 +163,19 @@ export class VariantTree {
    * A checkpoint marks a decision point where you might want to branch later.
    * The checkpoint is placed after the last message in the active branch.
    *
+   * If a `workspacePath` is provided and snapshot adapters are configured,
+   * a code snapshot is automatically taken and attached to the checkpoint.
+   *
    * @param label - Human-readable label for the checkpoint
-   * @param metadata - Optional metadata (future: code snapshot ref)
+   * @param options - Optional: metadata and workspacePath for code snapshot
    * @returns The created checkpoint
    */
   async createCheckpoint(
     label: string,
-    metadata?: Record<string, unknown>
+    options?: {
+      metadata?: Record<string, unknown>;
+      workspacePath?: string;
+    }
   ): Promise<Checkpoint> {
     const ws = this.requireWorkspace();
     const branch = ws.branches[ws.activeBranchId];
@@ -187,8 +200,17 @@ export class VariantTree {
       branchId: branch.id,
       messageIndex,
       createdAt: now(),
-      ...(metadata && { metadata }),
+      ...(options?.metadata && { metadata: options.metadata }),
     };
+
+    // Take code snapshot if adapters are available and workspacePath provided
+    if (options?.workspacePath && this.snapshotStorage && this.fileSystem) {
+      checkpoint.snapshot = await createSnapshot(
+        options.workspacePath,
+        this.fileSystem,
+        this.snapshotStorage,
+      );
+    }
 
     ws.checkpoints[checkpoint.id] = checkpoint;
     ws.updatedAt = now();
@@ -213,6 +235,49 @@ export class VariantTree {
     return Object.values(ws.checkpoints).filter(
       (cp) => cp.branchId === branchId
     );
+  }
+
+  /**
+   * Restore the workspace to the state at a given checkpoint.
+   *
+   * If the checkpoint has a code snapshot and adapters are configured,
+   * the workspace files are restored to match the snapshot.
+   * Also switches the conversation to the checkpoint's branch.
+   *
+   * @param checkpointId - The checkpoint to restore
+   * @param workspacePath - Path to the workspace root (required for code restore)
+   * @returns Restore summary or null if no snapshot was attached
+   */
+  async restoreCheckpoint(
+    checkpointId: string,
+    workspacePath?: string,
+  ) {
+    const ws = this.requireWorkspace();
+    const checkpoint = ws.checkpoints[checkpointId];
+
+    if (!checkpoint) {
+      throw new Error(`Checkpoint "${checkpointId}" not found`);
+    }
+
+    // Switch to the checkpoint's branch
+    await this.switchBranch(checkpoint.branchId);
+
+    // Restore code snapshot if available
+    if (
+      checkpoint.snapshot &&
+      workspacePath &&
+      this.snapshotStorage &&
+      this.fileSystem
+    ) {
+      return restoreSnapshot(
+        workspacePath,
+        checkpoint.snapshot,
+        this.fileSystem,
+        this.snapshotStorage,
+      );
+    }
+
+    return null;
   }
 
   // ─── Branching ───────────────────────────────────────────────────────────
