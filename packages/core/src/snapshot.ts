@@ -8,7 +8,6 @@
  * Deduplication: identical files across checkpoints are stored only once.
  */
 
-import { createHash } from 'crypto';
 import {
   FileEntry,
   Snapshot,
@@ -18,11 +17,15 @@ import {
 import { now } from './utils';
 
 /**
- * Hash file contents using SHA-256.
- * This is the content-addressable key used for deduplication.
+ * Hash file contents using SHA-256 via the Web Crypto API.
+ * Works in both browser and Node.js (15+) — zero dependencies.
  */
-function hashBytes(content: Buffer | Uint8Array): string {
-  return createHash('sha256').update(content).digest('hex');
+async function hashBytes(content: Uint8Array): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', content.buffer as ArrayBuffer);
+  const hashArray = new Uint8Array(hashBuffer);
+  return Array.from(hashArray)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 /**
@@ -52,7 +55,7 @@ export async function createSnapshot(
     filePaths.map(async (relativePath) => {
       const fullPath = `${rootPath}/${relativePath}`;
       const content = await fs.readFile(fullPath);
-      const hash = hashBytes(content);
+      const hash = await hashBytes(new Uint8Array(content));
       const size = content.byteLength;
 
       // Dedup: only store blob if it's new
@@ -122,7 +125,7 @@ export async function restoreSnapshot(
       if (currentSet.has(entry.path)) {
         // File exists — check if hash matches
         const currentContent = await fs.readFile(fullPath);
-        const currentHash = hashBytes(currentContent);
+        const currentHash = await hashBytes(new Uint8Array(currentContent));
 
         if (currentHash === entry.hash) {
           summary.skipped.push(entry.path);
@@ -204,7 +207,7 @@ export async function diffSnapshot(
 
     // Both exist — compare hashes
     const content = await fs.readFile(`${rootPath}/${filePath}`);
-    const currentHash = hashBytes(content);
+    const currentHash = await hashBytes(new Uint8Array(content));
 
     if (currentHash === snapshotEntry.hash) {
       diff.unchanged.push(filePath);
