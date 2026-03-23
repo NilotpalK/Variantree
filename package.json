@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Version control for AI conversations",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "workspaces": [
     "packages/*"
   ]
