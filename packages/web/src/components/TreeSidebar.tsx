@@ -452,7 +452,13 @@ export default function TreeSidebar({
       {/* Header */}
       <div className="sidebar-header">
         <div className="sidebar-title">
-          <span className="sidebar-icon">▲</span>
+          <svg className="sidebar-icon" viewBox="0 0 100 100" fill="none" style={{ width: 18, height: 18 }}>
+            <polygon points="20,20 38,20 58,80 40,80" fill="currentColor" />
+            <polygon points="60,20 64,20 44,80 40,80" fill="currentColor" />
+            <polygon points="67,20 71,20 51,80 47,80" fill="currentColor" />
+            <polygon points="74,20 78,20 58,80 54,80" fill="currentColor" />
+            <polygon points="81,20 85,20 65,80 61,80" fill="currentColor" />
+          </svg>
           <span>Variantree</span>
         </div>
         <div className="sidebar-header-right">
