@@ -126,7 +126,8 @@ export default function App() {
         <TreeVisualization
           branches={engine.branches}
           checkpoints={engine.checkpoints}
-          onSwitchBranch={(branchId) => {
+          onSwitchBranch={engine.switchBranch}
+          onRestoreBranch={(branchId) => {
             engine.switchBranch(branchId);
             setShowTreeView(false);
           }}

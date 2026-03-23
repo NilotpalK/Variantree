@@ -1,79 +1,110 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback, useEffect, useState } from 'react';
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  type Node,
+  type Edge,
+  type NodeTypes,
+  BackgroundVariant,
+  useNodesState,
+  useEdgesState,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import { Branch, Checkpoint } from '@variantree/core';
 import { getBranchColor, getBranchColorMuted } from '../utils/branchColors';
+import BranchNode, { type BranchNodeData } from './BranchNode';
 
 interface TreeVisualizationProps {
   branches: Array<Branch & { isActive: boolean; messageCount: number }>;
   checkpoints: Checkpoint[];
   onSwitchBranch: (branchId: string) => void;
+  onRestoreBranch: (branchId: string) => void;
 }
 
-interface TreeNode {
+const NODE_WIDTH = 140;
+const NODE_HEIGHT = 36;
+const HORIZONTAL_GAP = 40;
+const VERTICAL_GAP = 70;
+
+const nodeTypes: NodeTypes = {
+  branch: BranchNode,
+};
+
+interface LayoutNode {
   branch: Branch & { isActive: boolean; messageCount: number };
-  children: TreeNode[];
+  children: LayoutNode[];
+  colorIndex: number;
   x: number;
   y: number;
-  colorIndex: number;
 }
-
-const NODE_WIDTH = 160;
-const NODE_HEIGHT = 56;
-const HORIZONTAL_GAP = 60;
-const VERTICAL_GAP = 80;
 
 export default function TreeVisualization({
   branches,
   checkpoints,
   onSwitchBranch,
+  onRestoreBranch,
 }: TreeVisualizationProps) {
-  // Build a color map: branch id → index
   const branchColorMap = useMemo(() => {
     const map = new Map<string, number>();
     branches.forEach((b, i) => map.set(b.id, i));
     return map;
   }, [branches]);
 
-  // Build tree structure and calculate positions
-  const { nodes, connections, svgWidth, svgHeight } = useMemo(() => {
-    const childrenMap = new Map<string, Branch[]>();
+  const { initialNodes, initialEdges } = useMemo(() => {
+    // Build parent→children map
+    const childrenMap = new Map<string, Array<Branch & { isActive: boolean; messageCount: number }>>();
+    // Build child→parent branch map for ancestry walk
+    const parentBranchMap = new Map<string, string>(); // childBranchId → parentBranchId
 
     for (const branch of branches) {
       if (branch.parentCheckpointId) {
         const cp = checkpoints.find((c) => c.id === branch.parentCheckpointId);
         if (cp) {
-          if (!childrenMap.has(cp.branchId)) {
-            childrenMap.set(cp.branchId, []);
-          }
+          if (!childrenMap.has(cp.branchId)) childrenMap.set(cp.branchId, []);
           childrenMap.get(cp.branchId)!.push(branch);
+          parentBranchMap.set(branch.id, cp.branchId);
         }
       }
     }
 
-    function buildTree(
+    // Walk up from active branch to root, collect all ancestor branch IDs
+    const activeBranch = branches.find((b) => b.isActive);
+    const activePath = new Set<string>();
+    if (activeBranch) {
+      let current: string | undefined = activeBranch.id;
+      while (current) {
+        activePath.add(current);
+        current = parentBranchMap.get(current);
+      }
+    }
+
+    function buildLayoutTree(
       branch: Branch & { isActive: boolean; messageCount: number },
-    ): TreeNode {
+    ): LayoutNode {
       const childBranches = (childrenMap.get(branch.id) || []) as Array<Branch & { isActive: boolean; messageCount: number }>;
-      const children = childBranches.map((child) => buildTree(child));
       return {
         branch,
-        children,
+        children: childBranches.map((child) => buildLayoutTree(child)),
+        colorIndex: branchColorMap.get(branch.id) ?? 0,
         x: 0,
         y: 0,
-        colorIndex: branchColorMap.get(branch.id) ?? 0,
       };
     }
 
     const roots = branches
       .filter((b) => b.parentCheckpointId === null)
-      .map((b) => buildTree(b));
+      .map((b) => buildLayoutTree(b));
 
     if (roots.length === 0) {
-      return { nodes: [], connections: [], svgWidth: 0, svgHeight: 0 };
+      return { initialNodes: [], initialEdges: [] };
     }
 
+    // Layout: top-down tree, center parents over children
     let nextX = 0;
 
-    function layoutTree(node: TreeNode, depth: number): void {
+    function layoutTree(node: LayoutNode, depth: number): void {
       node.y = depth * (NODE_HEIGHT + VERTICAL_GAP);
 
       if (node.children.length === 0) {
@@ -91,152 +122,175 @@ export default function TreeVisualization({
 
     roots.forEach((root) => layoutTree(root, 0));
 
-    const allNodes: TreeNode[] = [];
-    const allConnections: Array<{
-      fromX: number;
-      fromY: number;
-      toX: number;
-      toY: number;
-      colorIndex: number;
-    }> = [];
+    // Flatten into React Flow nodes and edges
+    const rfNodes: Node<BranchNodeData>[] = [];
+    const rfEdges: Edge[] = [];
 
-    function flatten(node: TreeNode): void {
-      allNodes.push(node);
-      node.children.forEach((child) => {
-        allConnections.push({
-          fromX: node.x + NODE_WIDTH / 2,
-          fromY: node.y + NODE_HEIGHT,
-          toX: child.x + NODE_WIDTH / 2,
-          toY: child.y,
+    function flatten(node: LayoutNode): void {
+      const branchCheckpoints = checkpoints.filter(
+        (cp) => cp.branchId === node.branch.id,
+      );
+
+      // Build parent branch name for hover card
+      let parentBranchName = '—';
+      if (node.branch.parentCheckpointId) {
+        const parentCp = checkpoints.find((c) => c.id === node.branch.parentCheckpointId);
+        if (parentCp) {
+          const parentBranch = branches.find((b) => b.id === parentCp.branchId);
+          if (parentBranch) parentBranchName = parentBranch.name;
+        }
+      }
+
+      const lastUserMsg = [...node.branch.messages].reverse().find((m) => m.role === 'user');
+      const lastAssistantMsg = [...node.branch.messages].reverse().find((m) => m.role === 'assistant');
+
+      rfNodes.push({
+        id: node.branch.id,
+        type: 'branch',
+        position: { x: node.x, y: node.y },
+        data: {
+          label: node.branch.name,
           colorIndex: node.colorIndex,
+          isActive: node.branch.isActive,
+          messageCount: node.branch.messageCount,
+          checkpointCount: branchCheckpoints.length,
+          branchId: node.branch.id,
+          parentBranchName,
+          createdAt: node.branch.createdAt,
+          lastUserContent: lastUserMsg?.content ?? '',
+          lastAssistantContent: lastAssistantMsg?.content ?? '',
+          isCardOpen: false,
+          onRestoreBranch,
+        },
+      });
+
+      node.children.forEach((child) => {
+        const parentColor = getBranchColor(node.colorIndex);
+        const isOnActivePath = activePath.has(child.branch.id);
+
+        rfEdges.push({
+          id: `${node.branch.id}->${child.branch.id}`,
+          source: node.branch.id,
+          target: child.branch.id,
+          type: 'default',
+          animated: isOnActivePath,
+          style: {
+            stroke: parentColor,
+            strokeWidth: isOnActivePath ? 2 : 1.5,
+            strokeOpacity: isOnActivePath ? 0.8 : 0.35,
+          },
         });
+
         flatten(child);
       });
     }
 
     roots.forEach((root) => flatten(root));
 
-    const maxX = Math.max(...allNodes.map((n) => n.x)) + NODE_WIDTH;
-    const maxY = Math.max(...allNodes.map((n) => n.y)) + NODE_HEIGHT;
+    return { initialNodes: rfNodes, initialEdges: rfEdges };
+  }, [branches, checkpoints, branchColorMap, onRestoreBranch]);
 
-    return {
-      nodes: allNodes,
-      connections: allConnections,
-      svgWidth: maxX + 80,
-      svgHeight: maxY + 80,
-    };
-  }, [branches, checkpoints, branchColorMap]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  if (nodes.length === 0) {
+  useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
+
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const nodesWithCard = useMemo(
+    () => nodes.map((n) => ({ ...n, data: { ...n.data, isCardOpen: n.id === selectedNodeId } })),
+    [nodes, selectedNodeId],
+  );
+
+  const onNodeClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      setSelectedNodeId((prev) => (prev === node.id ? null : node.id));
+      onSwitchBranch(node.id);
+    },
+    [onSwitchBranch],
+  );
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNodeId(null);
+  }, []);
+
+  if (initialNodes.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-muted">
-        <p>No branches to visualize</p>
+        <div className="flex flex-col items-center gap-3">
+          <svg className="w-10 h-10 text-text-faint" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="8" y="14" width="8" height="7" rx="1" />
+            <path d="M6.5 10v1.5a1.5 1.5 0 0 0 1.5 1.5h0" />
+            <path d="M17.5 10v1.5a1.5 1.5 0 0 1-1.5 1.5h0" />
+          </svg>
+          <p className="text-[13px] text-text-faint m-0">No branches to visualize</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex-1 flex flex-col h-screen bg-bg">
-      <div className="py-4 px-6 border-b border-border flex items-center justify-between bg-bg-secondary">
-        <h2 className="text-sm font-semibold text-text-primary m-0">Conversation Tree</h2>
-        <span className="text-xs text-text-muted">
+      <div className="py-3 px-5 border-b border-border flex items-center justify-between bg-bg-secondary">
+        <h2 className="text-[13px] font-semibold text-text-primary m-0 tracking-[-0.01em]">
+          Conversation Tree
+        </h2>
+        <span className="text-[11px] text-text-muted tabular-nums">
           {branches.length} branches · {checkpoints.length} checkpoints
         </span>
       </div>
 
-      <div className="flex-1 overflow-auto p-10 flex items-start justify-center">
-        <svg
-          width={svgWidth}
-          height={svgHeight}
-          viewBox={`-40 -20 ${svgWidth} ${svgHeight}`}
+      <div className="flex-1">
+        <ReactFlow
+          nodes={nodesWithCard}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.35, maxZoom: 0.65 }}
+          minZoom={0.2}
+          maxZoom={2}
+          proOptions={{ hideAttribution: true }}
+          defaultEdgeOptions={{
+            type: 'default',
+          }}
         >
-          {/* Connections — colored by parent branch */}
-          {connections.map((conn, i) => {
-            const midY = (conn.fromY + conn.toY) / 2;
-            const color = getBranchColor(conn.colorIndex);
-            return (
-              <path
-                key={`conn-${i}`}
-                d={`M ${conn.fromX} ${conn.fromY} C ${conn.fromX} ${midY}, ${conn.toX} ${midY}, ${conn.toX} ${conn.toY}`}
-                fill="none"
-                stroke={color}
-                strokeWidth={2}
-                strokeOpacity={0.4}
-              />
-            );
-          })}
-
-          {/* Nodes — colored by branch */}
-          {nodes.map((node) => {
-            const branchCheckpoints = checkpoints.filter(
-              (cp) => cp.branchId === node.branch.id
-            );
-            const color = getBranchColor(node.colorIndex);
-            const muted = getBranchColorMuted(node.colorIndex, 0.08);
-            const mutedBorder = getBranchColorMuted(node.colorIndex, 0.3);
-
-            return (
-              <g
-                key={node.branch.id}
-                className="tree-node-group"
-                onClick={() => onSwitchBranch(node.branch.id)}
-                style={{ cursor: 'pointer' }}
-              >
-                {/* Node background */}
-                <rect
-                  x={node.x}
-                  y={node.y}
-                  width={NODE_WIDTH}
-                  height={NODE_HEIGHT}
-                  rx={8}
-                  fill={node.branch.isActive ? muted : 'var(--color-bg-elevated)'}
-                  stroke={node.branch.isActive ? color : mutedBorder}
-                  strokeWidth={node.branch.isActive ? 1.5 : 1}
-                  className="tree-node-rect"
-                />
-
-
-
-                {/* Branch name */}
-                <text
-                  x={node.x + 14}
-                  y={node.y + 22}
-                  className="tree-node-label"
-                  textAnchor="start"
-                  fill={node.branch.isActive ? color : 'var(--color-text-primary)'}
-                >
-                  {node.branch.name.length > 14
-                    ? node.branch.name.slice(0, 12) + '…'
-                    : node.branch.name}
-                </text>
-
-                {/* Meta info */}
-                <text
-                  x={node.x + 14}
-                  y={node.y + 40}
-                  className="tree-node-meta-text"
-                  textAnchor="start"
-                >
-                  {node.branch.messageCount} msgs
-                  {branchCheckpoints.length > 0
-                    ? ` · ${branchCheckpoints.length} cp`
-                    : ''}
-                </text>
-
-                {/* Active indicator dot */}
-                {node.branch.isActive && (
-                  <circle
-                    cx={node.x + NODE_WIDTH - 14}
-                    cy={node.y + NODE_HEIGHT / 2}
-                    r={4}
-                    fill={color}
-                    style={{ filter: `drop-shadow(0 0 4px ${color})` }}
-                  />
-                )}
-              </g>
-            );
-          })}
-        </svg>
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={20}
+            size={1}
+            color="var(--color-text-faint)"
+            style={{ opacity: 0.3 }}
+          />
+          <Controls
+            showInteractive={false}
+            className="rf-controls-pill"
+            position="bottom-left"
+          />
+          <MiniMap
+            nodeColor={(node) => {
+              const data = node.data as BranchNodeData;
+              return getBranchColor(data?.colorIndex ?? 0);
+            }}
+            maskColor="rgba(0, 0, 0, 0.55)"
+            className="rf-minimap-glass"
+            pannable
+            zoomable
+            nodeStrokeWidth={0}
+            nodeBorderRadius={3}
+          />
+        </ReactFlow>
       </div>
     </div>
   );

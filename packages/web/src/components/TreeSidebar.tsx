@@ -141,24 +141,21 @@ export default function TreeSidebar({
     const hasChildren = node.children.length > 0;
     const isCollapsed = collapsedNodes.has(node.branch.id);
 
-    const handleClick = () => {
-      if (hasChildren) {
-        setCollapsedNodes((prev) => {
-          const next = new Set(prev);
-          if (next.has(node.branch.id)) next.delete(node.branch.id);
-          else next.add(node.branch.id);
-          return next;
-        });
-      } else {
-        onSwitchBranch(node.branch.id);
-      }
+    const handleToggleCollapse = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setCollapsedNodes((prev) => {
+        const next = new Set(prev);
+        if (next.has(node.branch.id)) next.delete(node.branch.id);
+        else next.add(node.branch.id);
+        return next;
+      });
     };
 
     return (
       <div key={node.branch.id} className="branch-tree-node-wrapper flex flex-col" style={{ '--node-color': color } as React.CSSProperties}>
         <div
           className={`flex items-center gap-2 py-1.5 px-2 rounded-md cursor-pointer transition-all duration-150 ease-out select-none group ${isActive ? 'bg-bg-active' : ''} ${isHovered ? 'bg-bg-active' : ''} hover:bg-bg-hover`}
-          onClick={handleClick}
+          onClick={() => onSwitchBranch(node.branch.id)}
           onMouseEnter={() => handleNodeMouseEnter(node.branch.id)}
           onMouseLeave={handleMouseLeave}
         >
@@ -181,9 +178,32 @@ export default function TreeSidebar({
               {getRelativeTimeShort(node.branch.createdAt)}
             </span>
           )}
+          {/* Collapse toggle — right side, only for parent nodes */}
+          {hasChildren && (
+            <button
+              className="bg-transparent border-0 p-0 w-5 h-5 flex items-center justify-center shrink-0 cursor-pointer text-text-muted rounded transition-all duration-150 ease-out hover:text-text-primary hover:bg-bg-hover"
+              onClick={handleToggleCollapse}
+              aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+            >
+              <svg
+                className="w-3 h-3 transition-transform duration-200 ease-out"
+                style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+          )}
         </div>
-        {hasChildren && !isCollapsed && (
-          <div className="branch-tree-children ml-3 pl-3 relative" style={{ '--branch-line-color': color } as React.CSSProperties}>
+        {hasChildren && (
+          <div
+            className="branch-tree-children ml-4 pl-4 relative overflow-hidden transition-all duration-200 ease-out"
+            style={{
+              '--branch-line-color': color,
+              maxHeight: isCollapsed ? '0px' : '2000px',
+              opacity: isCollapsed ? 0 : 1,
+            } as React.CSSProperties}
+          >
             {node.children.map((child) => renderBranchNode(child))}
           </div>
         )}
