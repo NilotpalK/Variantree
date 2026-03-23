@@ -94,51 +94,104 @@
   position: relative;
 }
 
+/* Curved L-connector for every child (last and non-last) */
 .branch-tree-children > .branch-tree-node-wrapper::before {
   content: '';
   position: absolute;
-  left: -14px;
+  left: -16px;
   top: 0;
-  width: 14px;
-  height: 16px;
-  border-left: 1.5px solid var(--branch-line-color, var(--color-text-faint));
-  border-bottom: 1.5px solid var(--branch-line-color, var(--color-text-faint));
+  width: 16px;
+  height: 14px;
+  border-left: 2px solid var(--branch-line-color, var(--color-text-faint));
+  border-bottom: 2px solid var(--branch-line-color, var(--color-text-faint));
   border-bottom-left-radius: 10px;
   pointer-events: none;
-  opacity: 0.35;
+  opacity: 0.7;
 }
 
+/* Vertical continuation — starts at 14px (below the L-curve) to avoid doubling */
 .branch-tree-children > .branch-tree-node-wrapper:not(:last-child)::after {
   content: '';
   position: absolute;
-  left: -14px;
-  top: 16px;
+  left: -16px;
+  top: 14px;
   bottom: 0;
-  border-left: 1.5px solid var(--branch-line-color, var(--color-text-faint));
+  border-left: 2px solid var(--branch-line-color, var(--color-text-faint));
   pointer-events: none;
-  opacity: 0.35;
+  opacity: 0.7;
 }
 
-/* ─── SVG tree visualization ───────────────────────────────── */
+/* ─── React Flow dark theme overrides ──────────────────────── */
 
-.tree-node-rect {
-  transition: all 0.18s ease;
+.react-flow__pane {
+  background: var(--color-bg) !important;
 }
 
-.tree-node-group:hover .tree-node-rect {
-  filter: brightness(1.25);
+/* ── Controls: pill / segmented bar ─────────────────────────── */
+
+.rf-controls-pill.react-flow__controls {
+  display: flex;
+  flex-direction: row !important;
+  gap: 0 !important;
+  background: rgba(22, 22, 22, 0.75) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 20px !important;
+  padding: 2px !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
 }
 
-.tree-node-label {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
+.rf-controls-pill .react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 16px !important;
+  width: 26px !important;
+  height: 26px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  fill: var(--color-text-muted) !important;
+  color: var(--color-text-muted) !important;
+  transition: all 0.15s ease !important;
 }
 
-.tree-node-meta-text {
-  font-family: var(--font-sans);
-  font-size: 11px;
-  fill: var(--color-text-muted);
+.rf-controls-pill .react-flow__controls-button svg {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.rf-controls-pill .react-flow__controls-button:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+  fill: var(--color-text-primary) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* ── MiniMap: frosted glass panel ───────────────────────────── */
+
+.rf-minimap-glass.react-flow__minimap {
+  background: rgba(18, 18, 18, 0.6) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.rf-minimap-glass .react-flow__minimap-mask {
+  rx: 4;
+  ry: 4;
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 1;
+}
+
+/* ── Edges ──────────────────────────────────────────────────── */
+
+.react-flow__edge-path {
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.3));
 }
 
 /* ─── Custom scrollbar ─────────────────────────────────────── */
