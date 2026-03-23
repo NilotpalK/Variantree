@@ -1,12 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   VariantTree,
-  MemoryStorage,
   Workspace,
   Branch,
   Checkpoint,
   Message,
 } from '@variantree/core';
+import { dexieStorage } from '../storage/DexieStorage';
 
 export interface EngineState {
   workspace: Workspace | null;
@@ -32,7 +32,7 @@ export interface EngineActions {
  */
 export function useEngine(): EngineState & EngineActions {
   const engineRef = useRef<VariantTree>(
-    new VariantTree({ storage: new MemoryStorage() })
+    new VariantTree({ storage: dexieStorage })
   );
 
   const [state, setState] = useState<EngineState>({
@@ -62,9 +62,23 @@ export function useEngine(): EngineState & EngineActions {
     }
   }, []);
 
-  // Auto-create workspace on mount
+  // On mount: restore last workspace from IndexedDB, or create a fresh one
   useEffect(() => {
-    engineRef.current.createWorkspace('New Conversation').then(syncState);
+    (async () => {
+      const engine = engineRef.current;
+      const lastId = await dexieStorage.getLastWorkspaceId();
+      if (lastId) {
+        try {
+          await engine.loadWorkspace(lastId);
+          syncState();
+          return;
+        } catch {
+          // Workspace data corrupted / missing — fall through to create
+        }
+      }
+      await engine.createWorkspace('New Conversation');
+      syncState();
+    })();
   }, [syncState]);
 
   const createWorkspace = useCallback(async (title: string) => {

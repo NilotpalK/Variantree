@@ -50,6 +50,18 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes msgHighlight {
+  0%   { background: transparent; }
+  20%  { background: var(--bg-hover); }
+  80%  { background: var(--bg-hover); }
+  100% { background: transparent; }
+}
+
+.msg-highlight {
+  animation: msgHighlight 1.6s ease forwards;
+  border-radius: var(--radius-sm);
+}
+
 .msg-header {
   margin-bottom: 6px;
 }
