@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import './ChatInput.css';
 
 interface ChatInputProps {
   onSendMessage: (content: string) => void;
@@ -17,12 +16,11 @@ export default function ChatInput({
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize textarea
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 140)}px`;
     }
   }, [value]);
 
@@ -41,11 +39,11 @@ export default function ChatInput({
   };
 
   return (
-    <div className="chat-input-container">
-      <div className="chat-input-wrapper">
+    <div className="px-5 pt-2 pb-4 w-full shrink-0">
+      <div className="flex items-end gap-1.5 bg-bg-elevated border border-border rounded-lg p-1.5 pl-3 transition-all duration-200 ease-out max-w-[680px] mx-auto focus-within:border-[rgba(255,255,255,0.12)] focus-within:shadow-[0_0_0_1px_rgba(255,255,255,0.04)]">
         <textarea
           ref={textareaRef}
-          className="chat-input"
+          className="flex-1 bg-transparent border-0 outline-none text-text-primary text-[13px] font-[inherit] leading-relaxed resize-none max-h-[140px] py-1 placeholder:text-text-faint"
           placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -53,9 +51,9 @@ export default function ChatInput({
           rows={1}
           disabled={disabled}
         />
-        <div className="chat-input-actions">
+        <div className="flex items-center gap-0.5 shrink-0">
           <button
-            className="input-action-btn"
+            className="bg-transparent border-0 text-text-muted cursor-pointer p-1.5 rounded-md transition-all duration-150 ease-out leading-none flex items-center justify-center hover:bg-bg-hover hover:text-text-secondary [&>svg]:w-[15px] [&>svg]:h-[15px]"
             onClick={onCreateCheckpoint}
             title="Create checkpoint"
           >
@@ -66,7 +64,7 @@ export default function ChatInput({
             </svg>
           </button>
           <button
-            className="input-action-btn"
+            className="bg-transparent border-0 text-text-muted cursor-pointer p-1.5 rounded-md transition-all duration-150 ease-out leading-none flex items-center justify-center hover:bg-bg-hover hover:text-text-secondary [&>svg]:w-[15px] [&>svg]:h-[15px]"
             onClick={onCreateBranch}
             title="Create branch"
           >
@@ -80,7 +78,7 @@ export default function ChatInput({
             </svg>
           </button>
           <button
-            className="send-btn"
+            className="bg-text-primary text-bg border-0 w-7 h-7 rounded-md cursor-pointer flex items-center justify-center transition-all duration-150 ease-out hover:not-disabled:opacity-85 disabled:opacity-15 disabled:cursor-not-allowed [&>svg]:w-3.5 [&>svg]:h-3.5"
             onClick={handleSend}
             disabled={!value.trim() || disabled}
             title="Send message"

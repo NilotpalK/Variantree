@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { Branch, Checkpoint } from '@variantree/core';
 import { getBranchColor, getBranchColorMuted } from '../utils/branchColors';
-import './TreeVisualization.css';
 
 interface TreeVisualizationProps {
   branches: Array<Branch & { isActive: boolean; messageCount: number }>;
@@ -130,22 +129,22 @@ export default function TreeVisualization({
 
   if (nodes.length === 0) {
     return (
-      <div className="tree-viz-empty">
+      <div className="flex-1 flex items-center justify-center text-text-muted">
         <p>No branches to visualize</p>
       </div>
     );
   }
 
   return (
-    <div className="tree-viz-container">
-      <div className="tree-viz-header">
-        <h2>Conversation Tree</h2>
-        <span className="tree-viz-meta">
+    <div className="flex-1 flex flex-col h-screen bg-bg">
+      <div className="py-4 px-6 border-b border-border flex items-center justify-between bg-bg-secondary">
+        <h2 className="text-sm font-semibold text-text-primary m-0">Conversation Tree</h2>
+        <span className="text-xs text-text-muted">
           {branches.length} branches · {checkpoints.length} checkpoints
         </span>
       </div>
 
-      <div className="tree-viz-canvas">
+      <div className="flex-1 overflow-auto p-10 flex items-start justify-center">
         <svg
           width={svgWidth}
           height={svgHeight}
@@ -190,7 +189,7 @@ export default function TreeVisualization({
                   width={NODE_WIDTH}
                   height={NODE_HEIGHT}
                   rx={8}
-                  fill={node.branch.isActive ? muted : 'var(--bg-elevated)'}
+                  fill={node.branch.isActive ? muted : 'var(--color-bg-elevated)'}
                   stroke={node.branch.isActive ? color : mutedBorder}
                   strokeWidth={node.branch.isActive ? 1.5 : 1}
                   className="tree-node-rect"
@@ -204,7 +203,7 @@ export default function TreeVisualization({
                   y={node.y + 22}
                   className="tree-node-label"
                   textAnchor="start"
-                  fill={node.branch.isActive ? color : 'var(--text-primary)'}
+                  fill={node.branch.isActive ? color : 'var(--color-text-primary)'}
                 >
                   {node.branch.name.length > 14
                     ? node.branch.name.slice(0, 12) + '…'

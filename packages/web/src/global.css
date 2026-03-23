@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+/* Override Tailwind preflight's border-color: currentColor */
+@layer base {
+  *, *::before, *::after {
+    border-color: #2e2e2e;
+  }
+}
+
+/* ─── Design Tokens ────────────────────────────────────────── */
+@theme {
+  --color-bg: #0d0d0d;
+  --color-bg-secondary: #141414;
+  --color-bg-elevated: #1e1e1e;
+  --color-bg-hover: #1a1a1a;
+  --color-bg-active: #1f2a2a;
+
+  --color-border-DEFAULT: #2e2e2e;
+  --color-border-subtle: #222222;
+
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+  --color-text-faint: #3f3f46;
+
+  --color-accent: #ffffff;
+  --color-accent-muted: #888888;
+  --color-green: #22c55e;
+  --color-green-muted: rgba(34, 197, 94, 0.12);
+  --color-red: #ef4444;
+  --color-amber: #eab308;
+  --color-teal: #14b8a6;
+
+  --color-btn: #2a2a2a;
+  --color-btn-border: #2e2e2e;
+
+  --radius-DEFAULT: 10px;
+  --radius-sm: 8px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+
+  --font-sans: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ─── Animations ───────────────────────────────────────────── */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes msgHighlight {
+  0%   { background: transparent; }
+  20%  { background: rgba(255, 255, 255, 0.05); }
+  80%  { background: rgba(255, 255, 255, 0.05); }
+  100% { background: transparent; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+@keyframes detailCardIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Utility classes ──────────────────────────────────────── */
+
+.animate-fadeUp {
+  animation: fadeUp 0.25s ease-out;
+}
+
+.msg-highlight {
+  animation: msgHighlight 1.6s ease forwards;
+  border-radius: var(--radius-sm);
+}
+
+/* ─── Branch tree connector lines ──────────────────────────── */
+
+.branch-tree-children > .branch-tree-node-wrapper {
+  position: relative;
+}
+
+.branch-tree-children > .branch-tree-node-wrapper::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 0;
+  width: 14px;
+  height: 16px;
+  border-left: 1.5px solid var(--branch-line-color, var(--color-text-faint));
+  border-bottom: 1.5px solid var(--branch-line-color, var(--color-text-faint));
+  border-bottom-left-radius: 10px;
+  pointer-events: none;
+  opacity: 0.35;
+}
+
+.branch-tree-children > .branch-tree-node-wrapper:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 16px;
+  bottom: 0;
+  border-left: 1.5px solid var(--branch-line-color, var(--color-text-faint));
+  pointer-events: none;
+  opacity: 0.35;
+}
+
+/* ─── SVG tree visualization ───────────────────────────────── */
+
+.tree-node-rect {
+  transition: all 0.18s ease;
+}
+
+.tree-node-group:hover .tree-node-rect {
+  filter: brightness(1.25);
+}
+
+.tree-node-label {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tree-node-meta-text {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  fill: var(--color-text-muted);
+}
+
+/* ─── Custom scrollbar ─────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}
