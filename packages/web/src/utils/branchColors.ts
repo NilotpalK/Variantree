@@ -1,25 +1,23 @@
 /**
- * VS Code-style neon color palette for branch visualization.
- * Each branch gets assigned a distinct color for consistent
- * identification across the sidebar and full tree view.
+ * Branch color palette matching the user's exact specification.
+ * Each branch gets a distinct color for consistent identification.
  */
 
 export const BRANCH_COLORS = [
-  '#00d084', // neon green (primary)
-  '#00bfff', // neon cyan
-  '#c084fc', // neon purple
-  '#fb923c', // neon orange
-  '#f472b6', // neon pink
-  '#facc15', // neon yellow
-  '#34d399', // neon mint
-  '#60a5fa', // neon blue
-  '#f87171', // neon red
-  '#a78bfa', // neon violet
+  '#4ade80', // green (main)
+  '#38bdf8', // cyan/teal (hello)
+  '#a855f7', // purple (fd)
+  '#f97316', // orange (dsds)
+  '#f472b6', // pink (fdfd)
+  '#facc15', // yellow
+  '#34d399', // mint
+  '#60a5fa', // blue
+  '#f87171', // red
+  '#a78bfa', // violet
 ] as const;
 
 /**
  * Get a consistent color for a branch based on its index.
- * Cycles through the palette if there are more branches than colors.
  */
 export function getBranchColor(branchIndex: number): string {
   return BRANCH_COLORS[branchIndex % BRANCH_COLORS.length];

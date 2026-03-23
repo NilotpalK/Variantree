@@ -106,7 +106,7 @@ export default function App() {
   );
 
   return (
-    <div className="app">
+    <div className="flex h-screen w-screen">
       <TreeSidebar
         branches={engine.branches}
         checkpoints={engine.checkpoints}
@@ -132,7 +132,7 @@ export default function App() {
           }}
         />
       ) : (
-        <div className="main-content">
+        <div className="flex-1 flex flex-col min-w-0">
           <ChatPanel
             context={engine.context}
             ancestry={engine.ancestry}

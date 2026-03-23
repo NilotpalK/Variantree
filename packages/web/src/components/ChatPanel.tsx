@@ -1,6 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Message, Branch } from '@variantree/core';
-import './ChatPanel.css';
 
 interface ChatPanelProps {
   context: Message[];
@@ -25,21 +24,18 @@ export default function ChatPanel({
     else msgRefs.current.delete(index);
   }, []);
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [context.length]);
 
-  // Scroll to + highlight a specific message when checkpoint is clicked
   useEffect(() => {
     if (scrollToMessageIndex == null) return;
     const el = msgRefs.current.get(scrollToMessageIndex);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.classList.remove('msg-highlight');
-      // Force reflow so re-adding the class triggers the animation
       void el.offsetWidth;
       el.classList.add('msg-highlight');
     }
@@ -51,40 +47,42 @@ export default function ChatPanel({
 
   if (!activeBranch) {
     return (
-      <div className="chat-panel">
-        <div className="chat-empty">
-          <h2>Variantree</h2>
-          <p>Start a conversation to explore branches of thought.</p>
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-bg">
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
+          <h2 className="text-lg text-text-primary mb-2 font-semibold tracking-[-0.02em]">Variantree</h2>
+          <p className="text-xs text-text-muted leading-relaxed max-w-[280px]">Start a conversation to explore branches of thought.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="chat-panel">
-      <div className="chat-header">
-        <div className="chat-breadcrumb">{breadcrumb}</div>
-        <div className="chat-context-count">{context.length} messages</div>
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-bg">
+      {/* Top bar */}
+      <div className="py-3.5 px-5 border-b border-border bg-bg-secondary flex items-center justify-between">
+        <div className="text-[12px] text-text-secondary font-medium tracking-[-0.01em]">{breadcrumb}</div>
+        <div className="text-[11px] text-text-faint tabular-nums">{context.length} messages</div>
       </div>
 
-      <div className="chat-messages" ref={scrollRef}>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto py-6 px-5 flex flex-col gap-5 max-w-[680px] w-full mx-auto" ref={scrollRef}>
         {context.length === 0 ? (
-          <div className="chat-empty-state">
-            <p>Start typing to begin on <strong>{activeBranch.name}</strong></p>
+          <div className="flex-1 flex flex-col items-center justify-center text-center">
+            <p className="text-xs text-text-muted">Start typing to begin on <strong className="text-text-primary font-medium">{activeBranch.name}</strong></p>
           </div>
         ) : (
           context.map((msg, index) => (
             <div
               key={msg.id || index}
-              className={`msg ${msg.role}`}
+              className="animate-fadeUp"
               ref={(el) => setMsgRef(index, el)}
             >
-              <div className="msg-header">
-                <span className="msg-role">
+              <div className="mb-1">
+                <span className={`text-[10px] font-semibold tracking-[0.08em] uppercase ${msg.role === 'user' ? 'text-text-secondary' : 'text-green'}`}>
                   {msg.role === 'user' ? 'YOU' : 'ASSISTANT'}
                 </span>
               </div>
-              <div className="msg-body">
+              <div className={`text-[13px] leading-[1.7] whitespace-pre-wrap break-words ${msg.role === 'assistant' ? 'text-text-secondary' : 'text-text-primary'}`}>
                 {msg.content.split('\n').map((line, i) => (
                   <span key={i}>
                     {line}
