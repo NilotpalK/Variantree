@@ -1,0 +1,42 @@
+{
+  "name": "@variantree/watcher",
+  "version": "0.1.0",
+  "description": "Passive session file watcher and CLI for Variantree",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "variantree": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "ai",
+    "conversation",
+    "version-control",
+    "watcher",
+    "opencode",
+    "claude-code"
+  ],
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "dependencies": {
+    "@variantree/core": "*",
+    "chalk": "^5.6.2",
+    "chokidar": "^4.0.3",
+    "commander": "^12.1.0",
+    "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/sql.js": "^1.4.10",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
