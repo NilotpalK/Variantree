@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useState } from 'react';
+import { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -46,6 +46,22 @@ export default function TreeVisualization({
   onSwitchBranch,
   onRestoreBranch,
 }: TreeVisualizationProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [mousePos, setMousePos] = useState({ x: -1000, y: -1000 });
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setMousePos({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setMousePos({ x: -1000, y: -1000 });
+  }, []);
+
   const branchColorMap = useMemo(() => {
     const map = new Map<string, number>();
     branches.forEach((b, i) => map.set(b.id, i));
@@ -194,7 +210,23 @@ export default function TreeVisualization({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   useEffect(() => {
-    setNodes(initialNodes);
+    setNodes((currentNodes) => {
+      // If the number of nodes changed (e.g. new branch added), do a full layout reset
+      if (currentNodes.length !== initialNodes.length) {
+        return initialNodes;
+      }
+      
+      // Otherwise, just update the data/type to preserve user-dragged positions
+      return currentNodes.map((cn) => {
+        const matchingInitialNode = initialNodes.find((n) => n.id === cn.id);
+        if (!matchingInitialNode) return cn;
+        return {
+          ...cn,
+          data: matchingInitialNode.data,
+          // We intentionally DO NOT update cn.position here so dragging is preserved!
+        };
+      });
+    });
   }, [initialNodes, setNodes]);
 
   useEffect(() => {
@@ -238,32 +270,52 @@ export default function TreeVisualization({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-bg">
-      <div className="flex-1 relative">
+    <div className="flex-1 flex flex-col h-full bg-[#000000]">
+      <div 
+        className="flex-1 relative overflow-hidden"
+        ref={containerRef}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* Base Aceternity Background Layer */}
+        <div className="absolute inset-0 z-0 pointer-events-none" style={{ backgroundSize: '20px 20px', backgroundImage: 'radial-gradient(circle, #3a3a3a 1.5px, transparent 1.5px)' }} />
+        
+        {/* Interactive Highlighted Dot Spotlight */}
+        <div 
+          className="absolute inset-0 z-0 pointer-events-none transition-opacity duration-300"
+          style={{ 
+            backgroundSize: '20px 20px', 
+            backgroundImage: 'radial-gradient(circle, #737373 2.5px, transparent 2.5px)',
+            maskImage: `radial-gradient(180px circle at ${mousePos.x}px ${mousePos.y}px, black, transparent)`,
+            WebkitMaskImage: `radial-gradient(180px circle at ${mousePos.x}px ${mousePos.y}px, black, transparent)`
+          }} 
+        />
+
+        {/* React Flow Canvas Layer */}
         <ReactFlow
+          className="relative z-10"
           nodes={nodesWithCard}
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
+          onInit={(instance) => {
+            // Force fit view slightly after mount when nodes have guaranteed layout
+            setTimeout(() => {
+              instance.fitView({ padding: 0.2 });
+            }, 50);
+          }}
           nodeTypes={nodeTypes}
           fitView
-          fitViewOptions={{ padding: 0.35, maxZoom: 0.65 }}
-          minZoom={0.2}
+          fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }}
+          minZoom={0.1}
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
           defaultEdgeOptions={{
             type: 'default',
           }}
         >
-          <Background
-            variant={BackgroundVariant.Dots}
-            gap={20}
-            size={1}
-            color="var(--color-text-faint)"
-            style={{ opacity: 0.3 }}
-          />
           <Controls
             showInteractive={false}
             className="rf-controls-pill"
