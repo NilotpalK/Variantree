@@ -124,7 +124,7 @@
 /* ─── React Flow dark theme overrides ──────────────────────── */
 
 .react-flow__pane {
-  background: var(--color-bg) !important;
+  background: transparent !important;
 }
 
 /* ── Controls: pill / segmented bar ─────────────────────────── */

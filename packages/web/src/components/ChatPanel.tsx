@@ -39,7 +39,7 @@ export default function ChatPanel({
 
   if (!activeBranch) {
     return (
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-bg items-center justify-center text-center px-6">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-[#000000] items-center justify-center text-center px-6">
         <div className="w-12 h-12 rounded-xl bg-bg-elevated border border-border flex items-center justify-center shadow-sm mb-4">
           <svg className="w-6 h-6 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -52,7 +52,7 @@ export default function ChatPanel({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-bg">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-[#000000]">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto py-6 px-5 flex flex-col gap-5 max-w-[680px] w-full mx-auto" ref={scrollRef}>
         {context.length === 0 ? (
