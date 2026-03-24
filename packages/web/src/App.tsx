@@ -105,9 +105,59 @@ export default function App() {
     </svg>
   );
 
+  const breadcrumb = engine.ancestry
+    .map((id) => engine.branches.find((b) => b.id === id)?.name ?? '?')
+    .join(' → ');
+
   return (
-    <div className="flex h-screen w-screen">
-      <TreeSidebar
+    <div className="flex flex-col h-screen w-screen bg-bg">
+      {/* Global Header */}
+      <header className="flex border-b border-border bg-bg-secondary shrink-0 h-[48px]">
+        {/* Left portion matching sidebar width */}
+        <div className="flex items-center justify-between px-4 border-r border-border w-[320px] min-w-[320px]">
+          <div className="flex items-center gap-2 text-[14px] font-semibold text-text-primary tracking-[-0.01em] overflow-hidden">
+            <svg className="sidebar-icon shrink-0" viewBox="0 0 100 100" fill="none" style={{ width: 18, height: 18 }}>
+              <polygon points="20,20 38,20 58,80 40,80" fill="currentColor" />
+              <polygon points="60,20 64,20 44,80 40,80" fill="currentColor" />
+              <polygon points="67,20 71,20 51,80 47,80" fill="currentColor" />
+              <polygon points="74,20 78,20 58,80 54,80" fill="currentColor" />
+              <polygon points="81,20 85,20 65,80 61,80" fill="currentColor" />
+            </svg>
+            <span className="font-bold truncate">Variantree</span>
+          </div>
+          
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-green animate-[pulse_2s_ease-in-out_infinite]" />
+            <span className="text-[10px] font-semibold text-green uppercase tracking-[0.05em] mt-0.5">live</span>
+          </div>
+        </div>
+
+        {/* Right portion matching main content area */}
+        <div className="flex-1 flex items-center justify-between px-5 min-w-0">
+          <div className="flex items-center min-w-0">
+            {showTreeView ? (
+              <span className="text-[12px] font-medium text-text-secondary tracking-[-0.01em]">Conversation Tree</span>
+            ) : (
+              <span className="text-[12px] font-medium text-text-secondary tracking-[-0.01em] truncate">{breadcrumb || 'New Session'}</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-4 shrink-0">
+            {showTreeView ? (
+              <span className="text-[11px] text-text-muted tabular-nums">
+                {engine.branches.length} branches · {engine.checkpoints.length} checkpoints
+              </span>
+            ) : (
+              <span className="text-[11px] text-text-faint tabular-nums border border-border bg-bg-elevated px-2 py-0.5 rounded-md">
+                {engine.context.length} messages
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <div className="flex flex-1 min-h-0 bg-bg">
+        <TreeSidebar
         branches={engine.branches}
         checkpoints={engine.checkpoints}
         activeBranchId={engine.activeBranch?.id ?? null}
@@ -136,8 +186,6 @@ export default function App() {
         <div className="flex-1 flex flex-col min-w-0">
           <ChatPanel
             context={engine.context}
-            ancestry={engine.ancestry}
-            branches={engine.branches}
             activeBranch={engine.activeBranch}
             scrollToMessageIndex={scrollTarget}
           />
@@ -164,6 +212,7 @@ export default function App() {
         onConfirm={handleModalConfirm}
         onCancel={handleModalCancel}
       />
+      </div>
     </div>
   );
 }
