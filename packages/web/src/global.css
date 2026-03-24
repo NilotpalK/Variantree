@@ -98,27 +98,27 @@
 .branch-tree-children > .branch-tree-node-wrapper::before {
   content: '';
   position: absolute;
-  left: -16px;
+  left: -12px;
   top: 0;
-  width: 16px;
+  width: 12px;
   height: 14px;
   border-left: 2px solid var(--branch-line-color, var(--color-text-faint));
   border-bottom: 2px solid var(--branch-line-color, var(--color-text-faint));
-  border-bottom-left-radius: 10px;
+  border-bottom-left-radius: 8px;
   pointer-events: none;
-  opacity: 0.7;
+  opacity: 0.45;
 }
 
 /* Vertical continuation — starts at 14px (below the L-curve) to avoid doubling */
 .branch-tree-children > .branch-tree-node-wrapper:not(:last-child)::after {
   content: '';
   position: absolute;
-  left: -16px;
+  left: -12px;
   top: 14px;
   bottom: 0;
   border-left: 2px solid var(--branch-line-color, var(--color-text-faint));
   pointer-events: none;
-  opacity: 0.7;
+  opacity: 0.45;
 }
 
 /* ─── React Flow dark theme overrides ──────────────────────── */

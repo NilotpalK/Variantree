@@ -238,17 +238,8 @@ export default function TreeVisualization({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-screen bg-bg">
-      <div className="py-3 px-5 border-b border-border flex items-center justify-between bg-bg-secondary">
-        <h2 className="text-[13px] font-semibold text-text-primary m-0 tracking-[-0.01em]">
-          Conversation Tree
-        </h2>
-        <span className="text-[11px] text-text-muted tabular-nums">
-          {branches.length} branches · {checkpoints.length} checkpoints
-        </span>
-      </div>
-
-      <div className="flex-1">
+    <div className="flex-1 flex flex-col h-full bg-bg">
+      <div className="flex-1 relative">
         <ReactFlow
           nodes={nodesWithCard}
           edges={edges}

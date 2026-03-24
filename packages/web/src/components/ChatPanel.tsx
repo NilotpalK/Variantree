@@ -3,16 +3,12 @@ import { Message, Branch } from '@variantree/core';
 
 interface ChatPanelProps {
   context: Message[];
-  ancestry: string[];
-  branches: Array<Branch & { isActive: boolean; messageCount: number }>;
   activeBranch: Branch | null;
   scrollToMessageIndex?: number | null;
 }
 
 export default function ChatPanel({
   context,
-  ancestry,
-  branches,
   activeBranch,
   scrollToMessageIndex,
 }: ChatPanelProps) {
@@ -41,29 +37,22 @@ export default function ChatPanel({
     }
   }, [scrollToMessageIndex]);
 
-  const breadcrumb = ancestry
-    .map((id) => branches.find((b) => b.id === id)?.name ?? '?')
-    .join(' → ');
-
   if (!activeBranch) {
     return (
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-bg">
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
-          <h2 className="text-lg text-text-primary mb-2 font-semibold tracking-[-0.02em]">Variantree</h2>
-          <p className="text-xs text-text-muted leading-relaxed max-w-[280px]">Start a conversation to explore branches of thought.</p>
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-bg items-center justify-center text-center px-6">
+        <div className="w-12 h-12 rounded-xl bg-bg-elevated border border-border flex items-center justify-center shadow-sm mb-4">
+          <svg className="w-6 h-6 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
         </div>
+        <p className="text-sm font-medium text-text-primary mb-1">No active conversation</p>
+        <p className="text-xs text-text-muted leading-relaxed max-w-[280px]">Start a conversation to explore branches of thought.</p>
       </div>
     );
   }
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-bg">
-      {/* Top bar */}
-      <div className="py-3.5 px-5 border-b border-border bg-bg-secondary flex items-center justify-between">
-        <div className="text-[12px] text-text-secondary font-medium tracking-[-0.01em]">{breadcrumb}</div>
-        <div className="text-[11px] text-text-faint tabular-nums">{context.length} messages</div>
-      </div>
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto py-6 px-5 flex flex-col gap-5 max-w-[680px] w-full mx-auto" ref={scrollRef}>
         {context.length === 0 ? (

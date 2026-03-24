@@ -197,7 +197,7 @@ export default function TreeSidebar({
         </div>
         {hasChildren && (
           <div
-            className="branch-tree-children ml-4 pl-4 relative overflow-hidden transition-all duration-200 ease-out"
+            className="branch-tree-children ml-2.5 pl-3 relative overflow-hidden transition-all duration-200 ease-out"
             style={{
               '--branch-line-color': color,
               maxHeight: isCollapsed ? '0px' : '2000px',
@@ -337,7 +337,7 @@ export default function TreeSidebar({
 
   if (collapsed) {
     return (
-      <aside className="w-[44px] min-w-[44px] bg-bg-secondary border-r border-border flex flex-col h-screen transition-all duration-200 ease-out relative items-center pt-3">
+      <aside className="w-[44px] min-w-[44px] bg-bg-secondary border-r border-border flex flex-col h-full transition-all duration-200 ease-out relative items-center pt-3">
         <button
           className="bg-transparent border-0 text-text-faint cursor-pointer p-1 rounded-md flex items-center justify-center transition-all duration-150 ease-out hover:text-text-primary hover:bg-bg-hover [&>svg]:w-3.5 [&>svg]:h-3.5"
           onClick={onToggleCollapse}
@@ -366,44 +366,28 @@ export default function TreeSidebar({
   /* ─── Expanded ──── */
 
   return (
-    <aside className="w-[320px] min-w-[320px] bg-bg-secondary border-r border-border flex flex-col h-screen transition-all duration-200 ease-out relative">
-      {/* Header */}
-      <div className="py-3 px-4 flex items-center justify-between border-b border-border">
-        <div className="flex items-center gap-2 text-[13px] font-semibold text-text-primary tracking-[-0.01em]">
-          <svg className="sidebar-icon" viewBox="0 0 100 100" fill="none" style={{ width: 18, height: 18 }}>
-            <polygon points="20,20 38,20 58,80 40,80" fill="currentColor" />
-            <polygon points="60,20 64,20 44,80 40,80" fill="currentColor" />
-            <polygon points="67,20 71,20 51,80 47,80" fill="currentColor" />
-            <polygon points="74,20 78,20 58,80 54,80" fill="currentColor" />
-            <polygon points="81,20 85,20 65,80 61,80" fill="currentColor" />
-          </svg>
-          <span>Variantree</span>
+    <aside className="w-[320px] min-w-[320px] bg-bg-secondary border-r border-border flex flex-col h-full transition-all duration-200 ease-out relative">
+      {/* Tabs and Controls */}
+      <div className="flex items-center justify-between px-4 border-b border-border">
+        <div className="flex gap-4">
+          {(['tree', 'checkpoints', 'info'] as TabType[]).map((tab) => (
+            <button
+              key={tab}
+              className={`bg-transparent border-0 py-2.5 px-0 text-[12px] font-medium cursor-pointer border-b-[1.5px] border-solid transition-all duration-150 ease-out font-[inherit] leading-normal ${activeTab === tab ? 'text-text-primary border-b-text-primary' : 'text-text-muted border-b-transparent hover:text-text-secondary'}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-green animate-[pulse_2s_ease-in-out_infinite]" />
-            <span className="text-[10px] font-medium text-green">live</span>
-          </div>
-          <button
-            className="bg-transparent border-0 text-text-faint cursor-pointer p-1 rounded-md flex items-center justify-center transition-all duration-150 ease-out hover:text-text-primary hover:bg-bg-hover [&>svg]:w-3.5 [&>svg]:h-3.5"
-            onClick={onToggleCollapse} title="Collapse sidebar"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-4 px-4 border-b border-border">
-        {(['tree', 'checkpoints', 'info'] as TabType[]).map((tab) => (
-          <button
-            key={tab}
-            className={`bg-transparent border-0 py-2 px-0 text-[12px] font-medium cursor-pointer border-b-[1.5px] border-solid transition-all duration-150 ease-out font-[inherit] leading-normal ${activeTab === tab ? 'text-text-primary border-b-text-primary' : 'text-text-muted border-b-transparent hover:text-text-secondary'}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
+        
+        {/* Toggle Collapse */}
+        <button
+          className="bg-transparent border-0 text-text-faint cursor-pointer p-1.5 rounded-md flex items-center justify-center transition-all duration-150 ease-out hover:text-text-primary hover:bg-bg-hover [&>svg]:w-3.5 [&>svg]:h-3.5"
+          onClick={onToggleCollapse} title="Collapse sidebar"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
       </div>
 
       {/* Content */}
