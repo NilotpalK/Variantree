@@ -115,10 +115,33 @@ server.tool(
     const cwd = getCwd();
     const { engine } = await ensureWorkspace(cwd);
     const synced = await syncConversation(engine, cwd);
-    await engine.createCheckpoint(label, { workspacePath: cwd });
+    const cp = await engine.createCheckpoint(label, { workspacePath: cwd });
 
-    const lines = [`✓ Checkpoint "${label}" created with code snapshot.`];
-    if (synced > 0) lines.push(`  Synced ${synced} message(s).`);
+    const totalMessages = engine.getContext().length;
+    const lines = [`✓ Checkpoint "${label}" created.`];
+    lines.push(`  Messages synced: ${synced} new  (${totalMessages} total in context)`);
+
+    if (cp.snapshot) {
+      const allCheckpoints = engine.getCheckpoints();
+      const prevCp = allCheckpoints
+        .filter(c => c.id !== cp.id && c.branchId === cp.branchId && c.snapshot)
+        .sort((a, b) => b.createdAt - a.createdAt)[0];
+
+      if (prevCp?.snapshot) {
+        const prevPaths = new Map(prevCp.snapshot.files.map(f => [f.path, f.hash]));
+        const newPaths = new Map(cp.snapshot.files.map(f => [f.path, f.hash]));
+        const added = [...newPaths.keys()].filter(p => !prevPaths.has(p)).length;
+        const deleted = [...prevPaths.keys()].filter(p => !newPaths.has(p)).length;
+        const modified = [...newPaths.keys()].filter(p => prevPaths.has(p) && prevPaths.get(p) !== newPaths.get(p)).length;
+        const parts = [];
+        if (added > 0) parts.push(`+${added} added`);
+        if (modified > 0) parts.push(`~${modified} modified`);
+        if (deleted > 0) parts.push(`-${deleted} deleted`);
+        lines.push(`  Snapshot: ${parts.length > 0 ? parts.join('  ') : 'no file changes'}  (${cp.snapshot.fileCount} files total)`);
+      } else {
+        lines.push(`  Snapshot: ${cp.snapshot.fileCount} files  (${(cp.snapshot.totalSize / 1024).toFixed(1)} KB)`);
+      }
+    }
     return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
   }
 );
@@ -152,19 +175,24 @@ server.tool(
 
     // Branch will auto-checkpoint if cpId is undefined
     const branch = await engine.branch(name, cpId);
-    const lines = [`✓ Branch "${name}" created from ${checkpoint ? `"${cpLabel}"` : 'current un-checkpointed state'}.`];
+    const lines = [
+      `✓ Branch "${name}" created from ${checkpoint ? `"${cpLabel}"` : 'current un-checkpointed state'} and switched to it.`,
+      `⚡ IMPORTANT: Tell the user to restart this session now. At the start of the new session, your first action must be to read the file .variantree/branch-context.md to restore prior context.`,
+    ];
 
-    // Only restore files if we explicitly branched from an older timeframe
+    // Only restore files if we explicitly branched from an older checkpoint
     if (cpId && checkpoint) {
       const summary = await engine.restoreCheckpoint(cpId, cwd);
+      // restoreCheckpoint switches to the checkpoint's parent branch as a side effect —
+      // switch back to the newly created branch
+      await engine.switchBranch(branch.id);
       if (summary) {
         lines.push(`  Restored backward: ${summary.written.length} files written, ${summary.deleted.length} deleted.`);
       }
     }
 
     generateContextFile(cwd, name, engine.getContext());
-    lines.push(`  Context: .variantree/branch-context.md`);
-    lines.push(`⚡ Restart the session and read .variantree/branch-context.md for prior context.`);
+    lines.push(`  Context file written: .variantree/branch-context.md`);
     return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
   }
 );
@@ -242,6 +270,47 @@ server.tool(
   }
 );
 
+// ── log ────────────────────────────────────────────────────────
+
+server.tool(
+  'log',
+  'Show the conversation history for a branch without switching to it or modifying any files. Use this when the user asks to see previous conversation, history, or what was discussed on a branch.',
+  { branch: z.string().optional().describe('Branch name to show history for. Defaults to the active branch.') },
+  async ({ branch: branchName }) => {
+    const cwd = getCwd();
+    const { engine } = createEngine(cwd);
+    const ws = await engine.loadWorkspace(WORKSPACE_ID);
+    if (!ws) {
+      return { content: [{ type: 'text' as const, text: 'No Variantree workspace.' }] };
+    }
+
+    const branches = engine.getBranches();
+    const target = branchName
+      ? branches.find(b => b.name === branchName)
+      : branches.find(b => b.isActive);
+
+    if (!target) {
+      const names = branches.map(b => b.name).join(', ');
+      return { content: [{ type: 'text' as const, text: `✗ Branch "${branchName}" not found. Available: ${names}` }] };
+    }
+
+    const messages = engine.getContext(target.id);
+    if (messages.length === 0) {
+      return { content: [{ type: 'text' as const, text: `No messages on branch "${target.name}".` }] };
+    }
+
+    const lines = [`Conversation history for "${target.name}" (${messages.length} messages):`, ''];
+    for (const msg of messages) {
+      if (msg.role === 'system') continue;
+      const prefix = msg.role === 'user' ? 'User' : 'Assistant';
+      const content = msg.content.length > 400 ? msg.content.slice(0, 400) + '…' : msg.content;
+      lines.push(`${prefix}: ${content}`, '');
+    }
+
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+  }
+);
+
 // ── status ─────────────────────────────────────────────────────
 
 server.tool(
@@ -296,16 +365,39 @@ server.tool(
 
     const branches = engine.getBranches();
     const checkpoints = engine.getCheckpoints();
-    const lines: string[] = [];
 
-    for (let i = 0; i < branches.length; i++) {
-      const b = branches[i];
-      lines.push(`${b.isActive ? '●' : '○'} ${b.name}${b.isActive ? ' ← active' : ''} (${b.messageCount} msgs)`);
-      for (const cp of checkpoints.filter((c) => c.branchId === b.id)) {
-        lines.push(`│  ├─ ${cp.label}${cp.snapshot ? ' 📸' : ''}`);
-      }
-      if (i < branches.length - 1) lines.push('│');
+    // Build a branch-to-children map (skip checkpoint layer)
+    const cpById = new Map(checkpoints.map(c => [c.id, c]));
+    const childrenOf = new Map<string, typeof branches>();
+    for (const b of branches) {
+      if (!b.parentCheckpointId) continue;
+      const parentCp = cpById.get(b.parentCheckpointId);
+      if (!parentCp) continue;
+      const siblings = childrenOf.get(parentCp.branchId) ?? [];
+      siblings.push(b);
+      childrenOf.set(parentCp.branchId, siblings);
     }
+
+    type BranchMeta = (typeof branches)[number];
+
+    function renderBranch(branch: BranchMeta, prefix: string, connector: string): string[] {
+      const active = branch.isActive ? ' (active)' : '';
+      const out = [`${prefix}${connector}${branch.name}${active}`];
+      const children = childrenOf.get(branch.id) ?? [];
+      for (let i = 0; i < children.length; i++) {
+        const isLast = i === children.length - 1;
+        const childPrefix = prefix + (connector === '' ? '' : (connector.startsWith('└') ? '    ' : '│   '));
+        out.push(...renderBranch(children[i], childPrefix, isLast ? '└── ' : '├── '));
+      }
+      return out;
+    }
+
+    const root = branches.find(b => !b.parentCheckpointId);
+    if (!root) {
+      return { content: [{ type: 'text' as const, text: 'No root branch found.' }] };
+    }
+
+    const lines = renderBranch(root, '', '');
     return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
   }
 );

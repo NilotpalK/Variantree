@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "variantree": {
+      "type": "local",
+      "command": [
+        "npx",
+        "tsx",
+        "packages/mcp/src/server.ts"
+      ],
+      "environment": {
+        "VARIANTREE_DIR": "."
+      }
+    }
+  }
+}
