@@ -15,6 +15,10 @@ const ALWAYS_SKIP = new Set([
   '.git',
   '.DS_Store',
   'dist',
+  'opencode.json',
+  '.opencode',
+  '.vscode',
+  '.idea',
 ]);
 
 export class NodeFileSystem implements FileSystemAdapter {
