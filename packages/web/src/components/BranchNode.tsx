@@ -134,8 +134,8 @@ function BranchNode({ data }: NodeProps<BranchNodeType>) {
           background: data.isActive ? mutedBg : 'rgba(30, 30, 30, 0.85)',
           border: `1px solid ${data.isActive ? getBranchColorMuted(data.colorIndex, 0.35) : mutedBorder}`,
           boxShadow: data.isActive
-            ? `0 0 12px ${getBranchColorMuted(data.colorIndex, 0.1)}`
-            : 'none',
+            ? `0 0 14px ${getBranchColorMuted(data.colorIndex, 0.25)}, 0 0 5px ${getBranchColorMuted(data.colorIndex, 0.15)}`
+            : `0 0 12px ${getBranchColorMuted(data.colorIndex, 0.18)}, 0 0 4px ${getBranchColorMuted(data.colorIndex, 0.1)}`,
           backdropFilter: 'blur(8px)',
           outline: data.isCardOpen ? `1.5px solid ${getBranchColorMuted(data.colorIndex, 0.4)}` : 'none',
           outlineOffset: '2px',

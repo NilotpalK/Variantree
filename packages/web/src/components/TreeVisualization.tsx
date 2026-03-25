@@ -277,17 +277,22 @@ export default function TreeVisualization({
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
-        {/* Base Aceternity Background Layer */}
-        <div className="absolute inset-0 z-0 pointer-events-none" style={{ backgroundSize: '20px 20px', backgroundImage: 'radial-gradient(circle, #3a3a3a 1.5px, transparent 1.5px)' }} />
+        {/* Base Starfield Background Layer — diagonal staggered pattern */}
+        <div className="absolute inset-0 z-0 pointer-events-none" style={{
+          backgroundSize: '28px 28px',
+          backgroundPosition: '0 0, 14px 14px',
+          backgroundImage: 'radial-gradient(circle, #252525 0.6px, transparent 0.6px), radial-gradient(circle, #252525 0.6px, transparent 0.6px)'
+        }} />
         
-        {/* Interactive Highlighted Dot Spotlight */}
+        {/* Interactive Highlighted Dot Spotlight — diagonal staggered pattern */}
         <div 
           className="absolute inset-0 z-0 pointer-events-none transition-opacity duration-300"
           style={{ 
-            backgroundSize: '20px 20px', 
-            backgroundImage: 'radial-gradient(circle, #737373 2.5px, transparent 2.5px)',
-            maskImage: `radial-gradient(180px circle at ${mousePos.x}px ${mousePos.y}px, black, transparent)`,
-            WebkitMaskImage: `radial-gradient(180px circle at ${mousePos.x}px ${mousePos.y}px, black, transparent)`
+            backgroundSize: '28px 28px',
+            backgroundPosition: '0 0, 14px 14px',
+            backgroundImage: 'radial-gradient(circle, #505050 0.6px, transparent 0.6px), radial-gradient(circle, #505050 0.6px, transparent 0.6px)',
+            maskImage: `radial-gradient(120px circle at ${mousePos.x}px ${mousePos.y}px, black, transparent)`,
+            WebkitMaskImage: `radial-gradient(120px circle at ${mousePos.x}px ${mousePos.y}px, black, transparent)`
           }} 
         />
 
