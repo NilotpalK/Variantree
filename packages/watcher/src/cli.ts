@@ -177,6 +177,48 @@ program
     header('init');
     await ensureWorkspace(cwd);
     success('Workspace ready');
+
+    // Auto-configure OpenCode MCP
+    const opencodePath = path.join(cwd, 'opencode.json');
+    let hasMcp = false;
+    
+    try {
+      const devServerPath = path.join(cwd, 'packages', 'mcp', 'src', 'server.ts');
+      const isDev = fsSync.existsSync(devServerPath);
+      const command = isDev 
+        ? ["npx", "tsx", "packages/mcp/src/server.ts"] 
+        : ["npx", "-y", "@variantree/mcp"];
+
+      const mcpConfig = {
+        type: "local",
+        command,
+        environment: { VARIANTREE_DIR: "." }
+      };
+
+      if (fsSync.existsSync(opencodePath)) {
+        const existingInfo = JSON.parse(fsSync.readFileSync(opencodePath, 'utf8'));
+        if (!existingInfo.mcp) existingInfo.mcp = {};
+        if (!existingInfo.mcp.variantree) {
+           existingInfo.mcp.variantree = mcpConfig;
+           fsSync.writeFileSync(opencodePath, JSON.stringify(existingInfo, null, 2), 'utf8');
+           hasMcp = true;
+           success('OpenCode MCP server added to existing opencode.json');
+        } else {
+           hint('OpenCode MCP configuration already exists');
+        }
+      } else {
+         const newConfig = {
+            "$schema": "https://opencode.ai/config.json",
+            mcp: { variantree: mcpConfig }
+         };
+         fsSync.writeFileSync(opencodePath, JSON.stringify(newConfig, null, 2), 'utf8');
+         hasMcp = true;
+         success('Created opencode.json with Variantree MCP server');
+      }
+    } catch (err) {
+      hint('Could not auto-configure opencode.json. You may need to add the MCP server manually.');
+    }
+
     hint(`Run ${chalk.white('variantree checkpoint "label"')} after coding to save your progress`);
     divider();
   });

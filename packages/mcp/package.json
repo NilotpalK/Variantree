@@ -1,0 +1,37 @@
+{
+  "name": "@variantree/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Variantree — exposes checkpoint/branch/restore as AI-callable tools",
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "bin": {
+    "variantree-mcp": "./dist/server.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/server.js"
+  },
+  "keywords": [
+    "mcp",
+    "variantree",
+    "ai",
+    "opencode",
+    "model-context-protocol"
+  ],
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@variantree/core": "*",
+    "@variantree/watcher": "*",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

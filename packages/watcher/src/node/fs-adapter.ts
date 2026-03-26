@@ -12,9 +12,15 @@ import type { FileSystemAdapter } from '@variantree/core';
 const ALWAYS_SKIP = new Set([
   'node_modules',
   '.variantree',
+  '.venv',
+  'venv',
   '.git',
   '.DS_Store',
   'dist',
+  'opencode.json',
+  '.opencode',
+  '.vscode',
+  '.idea',
 ]);
 
 export class NodeFileSystem implements FileSystemAdapter {
