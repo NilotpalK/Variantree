@@ -123,9 +123,17 @@ server.tool(
 
     if (cp.snapshot) {
       const allCheckpoints = engine.getCheckpoints();
-      const prevCp = allCheckpoints
-        .filter(c => c.id !== cp.id && c.branchId === cp.branchId && c.snapshot)
-        .sort((a, b) => b.createdAt - a.createdAt)[0];
+      const activeBranch = engine.getActiveBranch();
+
+      // First look for a previous checkpoint on the same branch,
+      // then fall back to the parent checkpoint this branch was forked from
+      const prevCp =
+        allCheckpoints
+          .filter(c => c.id !== cp.id && c.branchId === cp.branchId && c.snapshot)
+          .sort((a, b) => b.createdAt - a.createdAt)[0] ??
+        (activeBranch.parentCheckpointId
+          ? allCheckpoints.find(c => c.id === activeBranch.parentCheckpointId && c.snapshot)
+          : undefined);
 
       if (prevCp?.snapshot) {
         const prevPaths = new Map(prevCp.snapshot.files.map(f => [f.path, f.hash]));
