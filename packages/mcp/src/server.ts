@@ -105,8 +105,6 @@ const server = new McpServer({
 });
 
 // ── checkpoint ─────────────────────────────────────────────────
-
-// @ts-expect-error — MCP SDK's Zod type inference is excessively deep (TS2589)
 server.tool(
   'checkpoint',
   'Create a Variantree checkpoint: syncs the current conversation from the AI coding tool and takes a snapshot of all code files. Use this when the user wants to save progress.',
@@ -232,12 +230,12 @@ server.tool(
     const lines = [`✓ Switched to branch "${name}".`];
 
     if (latestCp) {
-       const summary = await engine.restoreCheckpoint(latestCp.id, cwd);
-       if (summary) {
-         lines.push(`  Restored to checkpoint "${latestCp.label}": ${summary.written.length} files written, ${summary.deleted.length} deleted.`);
-       }
+      const summary = await engine.restoreCheckpoint(latestCp.id, cwd);
+      if (summary) {
+        lines.push(`  Restored to checkpoint "${latestCp.label}": ${summary.written.length} files written, ${summary.deleted.length} deleted.`);
+      }
     } else {
-       lines.push(`  (No checkpoints found on this branch to restore state.)`);
+      lines.push(`  (No checkpoints found on this branch to restore state.)`);
     }
 
     generateContextFile(cwd, name, engine.getContext());
