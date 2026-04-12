@@ -71,78 +71,11 @@ export interface Checkpoint {
   createdAt: number;
   /** Extensible metadata (e.g., future code snapshot references) */
   metadata?: Record<string, unknown>;
-  /** Optional code snapshot — full workspace state at this checkpoint */
-  snapshot?: Snapshot;
-}
-
-// ─── Code Snapshots ──────────────────────────────────────────────────────────
-
-/**
- * A single file entry in a snapshot.
- * Stores the file path and the content hash (blob reference).
- */
-export interface FileEntry {
-  /** Relative path from workspace root (e.g., "src/auth.ts") */
-  path: string;
-  /** SHA-256 hash of the file contents — used as blob key */
-  hash: string;
-  /** File size in bytes */
-  size: number;
-}
-
-/**
- * A snapshot is a complete manifest of every file in the workspace
- * at a specific point in time. The actual file contents are stored
- * as blobs in a SnapshotStorage backend, keyed by their content hash.
- */
-export interface Snapshot {
-  /** All files in the workspace at this point */
-  files: FileEntry[];
-  /** Total number of files */
-  fileCount: number;
-  /** Total size of all files in bytes */
-  totalSize: number;
-  /** Unix timestamp (ms) when the snapshot was taken */
-  createdAt: number;
-}
-
-/**
- * Abstract blob storage for file snapshots.
- *
- * Content-addressable: blobs are stored by their SHA-256 hash.
- * Duplicate content is stored only once (deduplication).
- *
- * Implement this for your environment:
- *   - IDE extension: write blobs to `.variantree/blobs/` on disk
- *   - Browser: store in IndexedDB via Dexie
- */
-export interface SnapshotStorage {
-  /** Store a blob. If the hash already exists, this is a no-op. */
-  writeBlob(hash: string, content: Buffer | Uint8Array): Promise<void>;
-  /** Read a blob by its content hash. Returns null if not found. */
-  readBlob(hash: string): Promise<Buffer | Uint8Array | null>;
-  /** Check if a blob exists (avoids re-storing unchanged files). */
-  hasBlob(hash: string): Promise<boolean>;
-  /** Delete a blob (used during garbage collection). */
-  deleteBlob(hash: string): Promise<void>;
-}
-
-/**
- * Abstract filesystem adapter for reading/writing workspace files.
- *
- * Implement this for your environment:
- *   - IDE extension: use Node.js `fs` module
- *   - Browser: use File System Access API
- */
-export interface FileSystemAdapter {
-  /** List all file paths in the workspace (relative paths, respecting ignores). */
-  listFiles(rootPath: string): Promise<string[]>;
-  /** Read a file's contents as bytes. */
-  readFile(filePath: string): Promise<Buffer | Uint8Array>;
-  /** Write bytes to a file (creating directories as needed). */
-  writeFile(filePath: string, content: Buffer | Uint8Array): Promise<void>;
-  /** Delete a file. */
-  deleteFile(filePath: string): Promise<void>;
+  /**
+   * Opaque ref to a code snapshot (e.g., a git commit SHA).
+   * Managed by a SnapshotProvider implementation.
+   */
+  snapshotRef?: string;
 }
 
 // ─── Workspace ───────────────────────────────────────────────────────────────
@@ -168,6 +101,12 @@ export interface Workspace {
   createdAt: number;
   /** Unix timestamp (ms) of last modification */
   updatedAt: number;
+  /**
+   * The OpenCode session ID this workspace is tracking.
+   * Set on first sync. Used to avoid re-importing messages from old sessions
+   * when a project folder is deleted and recreated at the same path.
+   */
+  openCodeSessionId?: string;
 }
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
@@ -189,15 +128,61 @@ export interface StorageBackend {
   delete(id: string): Promise<void>;
 }
 
+// ─── Snapshot Provider (new, git-backed) ─────────────────────────────────────
+
+/** Summary of what a restore operation changed. */
+export interface RestoreSummary {
+  /** Files that were written or overwritten */
+  written: string[];
+  /** Files that were deleted (didn't exist in the snapshot) */
+  deleted: string[];
+  /** Files that were unchanged (same hash, skipped) */
+  skipped: string[];
+}
+
+/** Diff between two snapshot states. */
+export interface SnapshotDiff {
+  /** Files added since the base snapshot */
+  added: string[];
+  /** Files modified since the base snapshot */
+  modified: string[];
+  /** Files deleted since the base snapshot */
+  deleted: string[];
+  /** Files unchanged between snapshots */
+  unchanged: string[];
+}
+
+/**
+ * Snapshot provider that captures and restores entire workspace state.
+ *
+ * Operates on whole workspace snapshots as atomic units. The default
+ * implementation (GitSnapshotProvider) uses git as a hidden storage engine
+ * — no user-visible commits, branches, or history pollution.
+ */
+export interface SnapshotProvider {
+  /** Capture the entire workspace state. Returns an opaque ref string. */
+  capture(workspacePath: string, label: string): Promise<string>;
+
+  /** Restore workspace files to a previously captured state. */
+  restore(workspacePath: string, ref: string): Promise<RestoreSummary>;
+
+  /** Diff between the current workspace and a captured state. */
+  diff(workspacePath: string, ref: string): Promise<SnapshotDiff>;
+
+  /** Diff between two captured states. */
+  diffRefs(refA: string, refB: string): Promise<SnapshotDiff>;
+
+  /** Delete a captured state (cleanup / garbage collection). */
+  drop(ref: string): Promise<void>;
+}
+
 // ─── Engine Options ──────────────────────────────────────────────────────────
 
 /** Configuration for the VariantTree engine */
 export interface VariantTreeOptions {
   /** Storage backend to use for persistence */
   storage: StorageBackend;
-  /** Optional: snapshot storage for code save points */
-  snapshotStorage?: SnapshotStorage;
-  /** Optional: filesystem adapter for reading/writing workspace files */
-  fileSystem?: FileSystemAdapter;
+  /** Snapshot provider for code save points (recommended: GitSnapshotProvider) */
+  snapshotProvider?: SnapshotProvider;
 }
 

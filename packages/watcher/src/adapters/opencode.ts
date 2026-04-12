@@ -1,31 +1,25 @@
 /**
  * @variantree/watcher — OpenCode Session Adapter
  *
- * OpenCode stores all data in a SQLite database.
+ * OpenCode stores all data in a SQLite database (WAL mode).
  * Location varies by OS:
  *   macOS/Linux: ~/.local/share/opencode/opencode.db
  *   Windows:     %APPDATA%/opencode/opencode.db
  *
- * Uses sql.js (pure JS, no native compilation) for maximum portability.
+ * Uses better-sqlite3 (native binding) so WAL-mode writes are visible
+ * immediately — sql.js only reads the main DB file and misses WAL data.
  *
  * Schema:
  *   session → message (data JSON: {role, time, ...})
  *             → part (data JSON: {type:"text", text:"..."})
  */
 
-import initSqlJs, { type SqlJsStatic } from 'sql.js';
+import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { Message } from '@variantree/core';
 import type { SessionAdapter } from './base.js';
-
-/** Cached sql.js module — initialised once, reused forever. */
-let cachedSQL: SqlJsStatic | null = null;
-async function getSQL(): Promise<SqlJsStatic> {
-  if (!cachedSQL) cachedSQL = await initSqlJs();
-  return cachedSQL;
-}
 
 /**
  * Get the OpenCode data directory based on the current OS.
@@ -39,7 +33,6 @@ function getOpenCodeDataDir(): string {
     const appData = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming');
     return path.join(appData, 'opencode');
   }
-  // macOS and Linux both use XDG_DATA_HOME or ~/.local/share
   const dataHome = process.env.XDG_DATA_HOME ?? path.join(os.homedir(), '.local', 'share');
   return path.join(dataHome, 'opencode');
 }
@@ -51,6 +44,11 @@ export class OpenCodeAdapter implements SessionAdapter {
     return path.join(getOpenCodeDataDir(), 'opencode.db');
   }
 
+  private openDb(): InstanceType<typeof Database> {
+    const dbPath = this.getDbPath();
+    return new Database(dbPath, { readonly: true });
+  }
+
   /**
    * Returns the path to the WAL file — this changes on every DB write,
    * making it the perfect file for chokidar to watch.
@@ -59,17 +57,13 @@ export class OpenCodeAdapter implements SessionAdapter {
     const dbPath = this.getDbPath();
     try {
       fs.accessSync(dbPath);
-      const SQL = await getSQL();
-      const buffer = fs.readFileSync(dbPath);
-      const db = new SQL.Database(buffer);
-
-      const result = db.exec(
-        `SELECT id FROM session WHERE directory = '${esc(workspacePath)}' ORDER BY time_updated DESC LIMIT 1`
-      );
+      const db = this.openDb();
+      const row = db.prepare(
+        `SELECT id FROM session WHERE directory = ? ORDER BY time_updated DESC LIMIT 1`
+      ).get(workspacePath) as { id: string } | undefined;
       db.close();
 
-      if (result.length === 0 || result[0].values.length === 0) return null;
-      // Prefer WAL file (changes on every write), fall back to the DB itself
+      if (!row) return null;
       const walPath = dbPath + '-wal';
       try { fs.accessSync(walPath); return walPath; } catch { return dbPath; }
     } catch {
@@ -79,85 +73,96 @@ export class OpenCodeAdapter implements SessionAdapter {
 
   /**
    * parseMessages reads from the SQLite DB directly.
-   * The `raw` parameter is ignored — we always query the DB.
+   * The `raw` parameter is ignored — use readMessagesAsync instead.
    */
   parseMessages(_raw: string): Message[] {
-    // Can't do async in parseMessages — use readMessagesAsync instead
     return [];
   }
 
   /**
-   * Async version of readMessages — preferred by the watcher.
+   * Get the ID of the most recently active OpenCode session for a directory.
+   * Returns null if no session exists yet.
    */
-  async readMessagesAsync(workspacePath?: string): Promise<Message[]> {
+  async getCurrentSessionId(workspacePath: string): Promise<string | null> {
     try {
-      const dbPath = this.getDbPath();
-      const buffer = fs.readFileSync(dbPath);
-      const SQL = await getSQL();
-      const db = new SQL.Database(buffer);
+      const db = this.openDb();
+      const row = db.prepare(
+        `SELECT id FROM session WHERE directory = ? ORDER BY time_updated DESC LIMIT 1`
+      ).get(workspacePath) as { id: string } | undefined;
+      db.close();
+      return row?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
 
-      // Find the most recently active session
-      let sessionQuery: string;
-      if (workspacePath) {
-        sessionQuery = `SELECT id FROM session 
-           WHERE directory = '${esc(workspacePath)}' ORDER BY time_updated DESC LIMIT 1`;
+  /**
+   * Read messages from OpenCode's DB, optionally scoped to a specific session.
+   *
+   * @param workspacePath - Filter to sessions for this directory
+   * @param sessionId - If provided, read from this specific session instead of
+   *   querying for the latest. Prevents stale messages from old sessions.
+   */
+  async readMessagesAsync(workspacePath?: string, sessionId?: string): Promise<Message[]> {
+    try {
+      const db = this.openDb();
+
+      let resolvedSessionId: string;
+      if (sessionId) {
+        const check = db.prepare(`SELECT id FROM session WHERE id = ? LIMIT 1`).get(sessionId) as { id: string } | undefined;
+        if (!check) { db.close(); return []; }
+        resolvedSessionId = sessionId;
       } else {
-        sessionQuery = `SELECT id FROM session ORDER BY time_updated DESC LIMIT 1`;
+        let row: { id: string } | undefined;
+        if (workspacePath) {
+          row = db.prepare(
+            `SELECT id FROM session WHERE directory = ? ORDER BY time_updated DESC LIMIT 1`
+          ).get(workspacePath) as { id: string } | undefined;
+        } else {
+          row = db.prepare(
+            `SELECT id FROM session ORDER BY time_updated DESC LIMIT 1`
+          ).get() as { id: string } | undefined;
+        }
+        if (!row) { db.close(); return []; }
+        resolvedSessionId = row.id;
       }
 
-      const sessionResult = db.exec(sessionQuery);
-      if (sessionResult.length === 0 || sessionResult[0].values.length === 0) {
-        db.close();
-        return [];
-      }
-      const sessionId = sessionResult[0].values[0][0] as string;
+      const msgRows = db.prepare(
+        `SELECT id, data, time_created FROM message WHERE session_id = ? ORDER BY time_created ASC`
+      ).all(resolvedSessionId) as Array<{ id: string; data: string; time_created: number }>;
 
-      // Get all messages for this session
-      const msgResult = db.exec(
-        `SELECT id, session_id, data, time_created FROM message 
-         WHERE session_id = '${esc(sessionId)}' ORDER BY time_created ASC`
-      );
-
-      // Get all text parts for this session
-      const partResult = db.exec(
-        `SELECT id, message_id, data FROM part 
-         WHERE session_id = '${esc(sessionId)}' ORDER BY time_created ASC`
-      );
+      const partRows = db.prepare(
+        `SELECT message_id, data FROM part WHERE session_id = ? ORDER BY time_created ASC`
+      ).all(resolvedSessionId) as Array<{ message_id: string; data: string }>;
 
       db.close();
 
       // Group text parts by message ID
       const partsByMsg = new Map<string, string[]>();
-      for (const row of (partResult[0]?.values ?? [])) {
-        const messageId = row[1] as string;
-        const partDataStr = row[2] as string;
+      for (const row of partRows) {
         try {
-          const partData = JSON.parse(partDataStr);
+          const partData = JSON.parse(row.data);
           if (partData.type === 'text' && partData.text) {
-            if (!partsByMsg.has(messageId)) partsByMsg.set(messageId, []);
-            partsByMsg.get(messageId)!.push(partData.text);
+            if (!partsByMsg.has(row.message_id)) partsByMsg.set(row.message_id, []);
+            partsByMsg.get(row.message_id)!.push(partData.text);
           }
         } catch { /* skip malformed parts */ }
       }
 
       // Build Message array
       const result: Message[] = [];
-      for (const row of (msgResult[0]?.values ?? [])) {
-        const msgId = row[0] as string;
-        const msgDataStr = row[2] as string;
-        const timeCreated = row[3] as number;
-
+      for (const msg of msgRows) {
         try {
-          const msgData = JSON.parse(msgDataStr);
-          const textParts = partsByMsg.get(msgId) ?? [];
+          const msgData = JSON.parse(msg.data);
+          const textParts = partsByMsg.get(msg.id) ?? [];
           const content = textParts.join('');
           if (!content) continue;
 
           result.push({
-            id: msgId,
+            id: msg.id,
             role: msgData.role === 'user' ? 'user' : 'assistant',
             content,
-            timestamp: timeCreated,
+            timestamp: msg.time_created,
           });
         } catch { /* skip malformed messages */ }
       }
@@ -167,9 +172,4 @@ export class OpenCodeAdapter implements SessionAdapter {
       return [];
     }
   }
-}
-
-/** Escape single quotes for SQL string literals. */
-function esc(s: string): string {
-  return s.replace(/'/g, "''");
 }

@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { MessageDiffer } from '../differ.js';
 import { OpenCodeAdapter } from '../adapters/opencode.js';
 import { NodeStorage } from '../node/storage.js';
-import initSqlJs, { type SqlJsStatic } from 'sql.js';
+import Database from 'better-sqlite3';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
@@ -78,13 +78,8 @@ describe('MessageDiffer', () => {
 // ─── OpenCode Adapter (SQLite Integration) ────────────────────────────────
 
 describe('OpenCodeAdapter (SQLite)', () => {
-  let SQL: SqlJsStatic;
   let tmpDir: string;
   let dbPath: string;
-
-  beforeAll(async () => {
-    SQL = await initSqlJs();
-  });
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vt-opencode-'));
@@ -97,13 +92,12 @@ describe('OpenCodeAdapter (SQLite)', () => {
     content: string;
     time: number;
   }>) {
-    const db = new SQL.Database();
+    const db = new Database(dbPath);
 
-    // Create OpenCode's schema
-    db.run(`CREATE TABLE project (id TEXT PRIMARY KEY)`);
-    db.run(`INSERT INTO project VALUES ('proj1')`);
+    db.exec(`CREATE TABLE project (id TEXT PRIMARY KEY)`);
+    db.exec(`INSERT INTO project VALUES ('proj1')`);
 
-    db.run(`CREATE TABLE session (
+    db.exec(`CREATE TABLE session (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       parent_id TEXT,
@@ -125,7 +119,7 @@ describe('OpenCodeAdapter (SQLite)', () => {
       workspace_id TEXT
     )`);
 
-    db.run(`CREATE TABLE message (
+    db.exec(`CREATE TABLE message (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
       time_created INTEGER NOT NULL,
@@ -133,7 +127,7 @@ describe('OpenCodeAdapter (SQLite)', () => {
       data TEXT NOT NULL
     )`);
 
-    db.run(`CREATE TABLE part (
+    db.exec(`CREATE TABLE part (
       id TEXT PRIMARY KEY,
       message_id TEXT NOT NULL,
       session_id TEXT NOT NULL,
@@ -142,33 +136,29 @@ describe('OpenCodeAdapter (SQLite)', () => {
       data TEXT NOT NULL
     )`);
 
-    // Insert a session
     const lastTime = messages.length > 0 ? messages[messages.length - 1].time : 1000;
-    db.run(`INSERT INTO session VALUES (
-      'ses_test1', 'proj1', NULL, 'test', '${workspaceDir.replace(/'/g, "''")}',
+    db.prepare(`INSERT INTO session VALUES (
+      'ses_test1', 'proj1', NULL, 'test', ?,
       'Test Session', '1.0', NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-      1000, ${lastTime}, NULL, NULL, NULL
-    )`);
+      1000, ?, NULL, NULL, NULL
+    )`).run(workspaceDir, lastTime);
 
-    // Insert messages and parts
+    const insertMsg = db.prepare(
+      `INSERT INTO message VALUES (?, 'ses_test1', ?, ?, ?)`
+    );
+    const insertPart = db.prepare(
+      `INSERT INTO part VALUES (?, ?, 'ses_test1', ?, ?, ?)`
+    );
+
     messages.forEach((msg, i) => {
       const msgId = `msg_${i}`;
       const msgData = JSON.stringify({ role: msg.role, time: { created: msg.time } });
-      db.run(`INSERT INTO message VALUES (
-        '${msgId}', 'ses_test1', ${msg.time}, ${msg.time}, '${msgData.replace(/'/g, "''")}'
-      )`);
+      insertMsg.run(msgId, msg.time, msg.time, msgData);
 
-      // Insert a text part for each message
       const partData = JSON.stringify({ type: 'text', text: msg.content });
-      db.run(`INSERT INTO part VALUES (
-        'prt_${i}', '${msgId}', 'ses_test1', ${msg.time}, ${msg.time},
-        '${partData.replace(/'/g, "''")}'
-      )`);
+      insertPart.run(`prt_${i}`, msgId, msg.time, msg.time, partData);
     });
 
-    // Write to disk
-    const data = db.export();
-    fsSync.writeFileSync(dbPath, Buffer.from(data));
     db.close();
   }
 

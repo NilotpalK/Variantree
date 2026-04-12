@@ -34,24 +34,20 @@ import {
   Checkpoint,
   Message,
   StorageBackend,
-  SnapshotStorage,
-  FileSystemAdapter,
+  SnapshotProvider,
   VariantTreeOptions,
 } from './types';
 import { resolveContext, getBranchAncestry } from './context';
-import { createSnapshot, restoreSnapshot } from './snapshot';
 import { generateId, hashContent, now } from './utils';
 
 export class VariantTree {
   private storage: StorageBackend;
-  private snapshotStorage: SnapshotStorage | null;
-  private fileSystem: FileSystemAdapter | null;
+  private snapshotProvider: SnapshotProvider | null;
   private workspace: Workspace | null = null;
 
   constructor(options: VariantTreeOptions) {
     this.storage = options.storage;
-    this.snapshotStorage = options.snapshotStorage ?? null;
-    this.fileSystem = options.fileSystem ?? null;
+    this.snapshotProvider = options.snapshotProvider ?? null;
   }
 
   // ─── Workspace Management ────────────────────────────────────────────────
@@ -203,12 +199,10 @@ export class VariantTree {
       ...(options?.metadata && { metadata: options.metadata }),
     };
 
-    // Take code snapshot if adapters are available and workspacePath provided
-    if (options?.workspacePath && this.snapshotStorage && this.fileSystem) {
-      checkpoint.snapshot = await createSnapshot(
+    if (options?.workspacePath && this.snapshotProvider) {
+      checkpoint.snapshotRef = await this.snapshotProvider.capture(
         options.workspacePath,
-        this.fileSystem,
-        this.snapshotStorage,
+        label,
       );
     }
 
@@ -262,19 +256,8 @@ export class VariantTree {
     // Switch to the checkpoint's branch
     await this.switchBranch(checkpoint.branchId);
 
-    // Restore code snapshot if available
-    if (
-      checkpoint.snapshot &&
-      workspacePath &&
-      this.snapshotStorage &&
-      this.fileSystem
-    ) {
-      return restoreSnapshot(
-        workspacePath,
-        checkpoint.snapshot,
-        this.fileSystem,
-        this.snapshotStorage,
-      );
+    if (checkpoint.snapshotRef && workspacePath && this.snapshotProvider) {
+      return this.snapshotProvider.restore(workspacePath, checkpoint.snapshotRef);
     }
 
     return null;
@@ -443,6 +426,17 @@ export class VariantTree {
    */
   getWorkspace(): Workspace {
     return this.requireWorkspace();
+  }
+
+  /**
+   * Persist the OpenCode session ID that this workspace is tracking.
+   * Called by syncConversation to enable session-aware message filtering.
+   */
+  async setOpenCodeSessionId(sessionId: string): Promise<void> {
+    const ws = this.requireWorkspace();
+    ws.openCodeSessionId = sessionId;
+    ws.updatedAt = now();
+    await this.save();
   }
 
   /**
