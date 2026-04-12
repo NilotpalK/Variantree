@@ -10,13 +10,15 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import path from 'node:path';
 import fsSync from 'node:fs';
+import readline from 'node:readline';
 import { VariantTree } from '@variantree/core';
 import { NodeStorage } from './node/storage.js';
-import { NodeBlobStore } from './node/blob-store.js';
-import { NodeFileSystem } from './node/fs-adapter.js';
+import { GitSnapshotProvider } from './node/git-snapshot.js';
 import { OpenCodeAdapter } from './adapters/opencode.js';
 import { MessageDiffer } from './differ.js';
 import { VariantreeWatcher } from './watcher.js';
+import { launchOpenCodeSession } from './node/session-launcher.js';
+import { mergeAgentsMd } from './agents-md.js';
 
 // ─── Theme ────────────────────────────────────────────────────────────────
 
@@ -32,14 +34,13 @@ const info = chalk.hex('#60A5FA');        // blue
 const LOGO = brand('◆ variantree');
 const CHECK = accent('✓');
 const CROSS = err('✗');
-const DOT = dim('•');
+const DOT = dim('·');
 const ARROW = dim('→');
 const BRANCH_ICON = brand('⎇');
-const SNAP_ICON = '📸';
-const MSG_ICON = info('💬');
+const SNAP = dim('◈');
 const TREE_VERT = dim('│');
-const TREE_FORK = dim('├─');
-const TREE_END = dim('└─');
+const TREE_FORK = dim('├──');
+const TREE_END = dim('└──');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -69,15 +70,85 @@ function divider() {
   console.log('');
 }
 
-/** Build a fully-configured engine (with snapshot adapters). */
+function nextSteps() {
+  console.log(`  ${ARROW} ${chalk.white('Next steps:')}`);
+  console.log(`     1. Restart OpenCode ${dim('(quit and reopen)')}`);
+  console.log(`     2. Tell it: ${info('"Read .variantree/branch-context.md for context"')}`);
+}
+
+interface BranchInfo {
+  id: string;
+  name: string;
+  parentCheckpointId: string | null;
+  messageCount: number;
+  isActive: boolean;
+}
+
+interface CheckpointInfo {
+  id: string;
+  label: string;
+  branchId: string;
+  snapshotRef?: string | null;
+  createdAt: number;
+}
+
+function printBranchNode(
+  branch: BranchInfo,
+  allBranches: BranchInfo[],
+  allCheckpoints: CheckpointInfo[],
+  indent: string,
+  isLast: boolean,
+) {
+  const connector = indent === '' ? '' : (isLast ? TREE_END : TREE_FORK) + ' ';
+  const nameColor = branch.isActive ? accent : chalk.white;
+  const activeTag = branch.isActive ? accent(' ●') : '';
+
+  console.log(`  ${dim(indent)}${connector}${nameColor.bold(branch.name)} ${dim(`(${branch.messageCount} msgs)`)}${activeTag}`);
+
+  const branchCps = allCheckpoints
+    .filter(cp => cp.branchId === branch.id)
+    .sort((a, b) => a.createdAt - b.createdAt);
+
+  const childIndent = indent === ''
+    ? '  '
+    : indent + (isLast ? '    ' : '│   ');
+
+  for (let i = 0; i < branchCps.length; i++) {
+    const cp = branchCps[i];
+    const childBranches = allBranches.filter(b => b.parentCheckpointId === cp.id);
+    const cpIsLast = i === branchCps.length - 1 && childBranches.length === 0;
+    const cpConnector = cpIsLast ? TREE_END : TREE_FORK;
+    const snap = cp.snapshotRef ? ` ${SNAP}` : '';
+    const time = dim(formatTime(cp.createdAt));
+
+    console.log(`  ${dim(childIndent)}${cpConnector} ${warn(cp.label)}${snap}  ${time}`);
+
+    const continuation = cpIsLast ? '    ' : '│   ';
+    for (let j = 0; j < childBranches.length; j++) {
+      printBranchNode(
+        childBranches[j],
+        allBranches,
+        allCheckpoints,
+        childIndent + continuation,
+        j === childBranches.length - 1,
+      );
+    }
+  }
+
+  if (branchCps.length === 0) {
+    console.log(`  ${dim(childIndent)}${TREE_END} ${dim('no checkpoints')}`);
+  }
+}
+
+/** Build a fully-configured engine. */
 function createEngine(cwd: string) {
   const storage = new NodeStorage(cwd);
+  const snapshotProvider = new GitSnapshotProvider(cwd);
   const engine = new VariantTree({
     storage,
-    snapshotStorage: new NodeBlobStore(cwd),
-    fileSystem: new NodeFileSystem(),
+    snapshotProvider,
   });
-  return { engine, storage };
+  return { engine, storage, snapshotProvider };
 }
 
 /** Load or auto-initialise workspace. */
@@ -97,7 +168,28 @@ async function ensureWorkspace(cwd: string) {
 /** Sync the latest conversation from OpenCode's SQLite into the Variantree branch. */
 async function syncConversation(engine: VariantTree, cwd: string) {
   const adapter = new OpenCodeAdapter();
-  const messages = await adapter.readMessagesAsync(cwd);
+  const workspace = engine.getWorkspace();
+
+  // Gate 1: session ID tracking — pin the workspace to a specific OpenCode session.
+  let sessionId = workspace.openCodeSessionId;
+  if (!sessionId) {
+    const currentId = await adapter.getCurrentSessionId(cwd);
+    if (!currentId) return 0;
+    await engine.setOpenCodeSessionId(currentId);
+    sessionId = currentId;
+  }
+
+  let messages = await adapter.readMessagesAsync(cwd, sessionId);
+
+  // Fallback: stored session may be stale (user started a new OpenCode session).
+  // Re-discover the current session and retry.
+  if (messages.length === 0) {
+    const freshId = await adapter.getCurrentSessionId(cwd);
+    if (!freshId || freshId === sessionId) return 0;
+    await engine.setOpenCodeSessionId(freshId);
+    sessionId = freshId;
+    messages = await adapter.readMessagesAsync(cwd, sessionId);
+  }
   if (messages.length === 0) return 0;
 
   const existing = engine.getContext();
@@ -149,6 +241,31 @@ function generateContextFile(cwd: string, branchName: string, messages: Array<{ 
   return filePath;
 }
 
+/** Prompt the user with a yes/no question. Defaults to yes (enter = Y). */
+async function promptConfirm(question: string): Promise<boolean> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() !== 'n');
+    });
+  });
+}
+
+/**
+ * Count messages on the active branch that have been added since the last checkpoint.
+ * These would be lost if the user switches/branches without checkpointing first.
+ */
+function countUnsavedMessages(engine: VariantTree): number {
+  const branch = engine.getActiveBranch();
+  const branchCheckpoints = engine
+    .getCheckpointsForBranch(branch.id)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  if (branchCheckpoints.length === 0) return branch.messages.length;
+  const lastCp = branchCheckpoints[branchCheckpoints.length - 1];
+  return Math.max(0, branch.messages.length - 1 - lastCp.messageIndex);
+}
+
 function formatTime(ts: number) {
   const d = new Date(ts);
   const now = new Date();
@@ -178,10 +295,7 @@ program
     await ensureWorkspace(cwd);
     success('Workspace ready');
 
-    // Auto-configure OpenCode MCP
     const opencodePath = path.join(cwd, 'opencode.json');
-    let hasMcp = false;
-    
     try {
       const devServerPath = path.join(cwd, 'packages', 'mcp', 'src', 'server.ts');
       const isDev = fsSync.existsSync(devServerPath);
@@ -201,7 +315,6 @@ program
         if (!existingInfo.mcp.variantree) {
            existingInfo.mcp.variantree = mcpConfig;
            fsSync.writeFileSync(opencodePath, JSON.stringify(existingInfo, null, 2), 'utf8');
-           hasMcp = true;
            success('OpenCode MCP server added to existing opencode.json');
         } else {
            hint('OpenCode MCP configuration already exists');
@@ -212,11 +325,25 @@ program
             mcp: { variantree: mcpConfig }
          };
          fsSync.writeFileSync(opencodePath, JSON.stringify(newConfig, null, 2), 'utf8');
-         hasMcp = true;
          success('Created opencode.json with Variantree MCP server');
       }
     } catch (err) {
       hint('Could not auto-configure opencode.json. You may need to add the MCP server manually.');
+    }
+
+    // Write or merge AGENTS.md with Variantree standing instructions
+    const agentsPath = path.join(cwd, 'AGENTS.md');
+    try {
+      let existing: string | null = null;
+      try { existing = fsSync.readFileSync(agentsPath, 'utf8'); } catch {}
+      if (existing?.includes('<!-- variantree:agents -->')) {
+        hint('AGENTS.md already has Variantree instructions');
+      } else {
+        fsSync.writeFileSync(agentsPath, mergeAgentsMd(existing), 'utf8');
+        success(existing ? 'Variantree instructions added to existing AGENTS.md' : 'Created AGENTS.md with Variantree instructions');
+      }
+    } catch {
+      hint('Could not write AGENTS.md.');
     }
 
     hint(`Run ${chalk.white('variantree checkpoint "label"')} after coding to save your progress`);
@@ -234,13 +361,12 @@ program
     const { engine } = await ensureWorkspace(cwd);
 
     const synced = await syncConversation(engine, cwd);
-    if (synced > 0) {
-      detail('synced', `${MSG_ICON} ${synced} message(s) from OpenCode`);
-    }
-
     await engine.createCheckpoint(label, { workspacePath: cwd });
     success(`Checkpoint ${chalk.white.bold(`"${label}"`)} created`);
-    detail('snapshot', `${SNAP_ICON} code saved`);
+    if (synced > 0) {
+      detail('synced', `${synced} message(s) from OpenCode`);
+    }
+    detail('snapshot', `code saved ${SNAP}`);
     divider();
   });
 
@@ -249,33 +375,58 @@ program
   .command('branch <name>')
   .description('Create a branch, restore code, and generate context')
   .option('-d, --dir <path>', 'workspace directory', process.cwd())
-  .option('-c, --checkpoint <label>', 'branch from a specific checkpoint (default: latest)')
+  .option('-c, --checkpoint <label>', 'branch from a specific checkpoint (default: latest on active branch)')
+  .option('--force', 'skip the unsaved-work checkpoint prompt')
+  .option('--no-launch', 'skip auto-launching a new OpenCode session')
   .action(async (name: string, opts) => {
     const cwd = path.resolve(opts.dir);
     header('branch');
     const { engine } = await ensureWorkspace(cwd);
     await syncConversation(engine, cwd);
 
-    const checkpoints = engine.getCheckpoints();
+    // Guard: prompt if there are messages on this branch not yet captured in a checkpoint
+    if (!opts.force) {
+      const unsaved = countUnsavedMessages(engine);
+      if (unsaved > 0) {
+        const answer = await promptConfirm(
+          `  ${warn(`${unsaved} message(s) are not checkpointed and won't carry to the new branch.`)} Checkpoint now? ${dim('[Y/n]')} `
+        );
+        if (answer) {
+          const autoLabel = `Auto: before branch "${name}"`;
+          await engine.createCheckpoint(autoLabel, { workspacePath: cwd });
+          success(`Checkpoint ${chalk.white.bold(`"${autoLabel}"`)} created`);
+        }
+      }
+    }
+
+    // Use checkpoints on the active branch only; fall back to engine auto-create if none exist
+    const allCheckpoints = engine.getCheckpoints();
+    const activeBranch = engine.getActiveBranch();
+    const branchCheckpoints = engine
+      .getCheckpointsForBranch(activeBranch.id)
+      .sort((a, b) => a.createdAt - b.createdAt);
+
     let cpId: string | undefined;
     let cpLabel = 'current position';
 
     if (opts.checkpoint) {
-      const cp = checkpoints.find((c) => c.label === opts.checkpoint);
+      const cp = allCheckpoints.find((c) => c.label === opts.checkpoint);
       if (!cp) { errorMsg(`Checkpoint "${opts.checkpoint}" not found.`); process.exit(1); }
       cpId = cp.id;
       cpLabel = cp.label;
-    } else if (checkpoints.length > 0) {
-      const lastCp = checkpoints[checkpoints.length - 1];
+    } else if (branchCheckpoints.length > 0) {
+      const lastCp = branchCheckpoints[branchCheckpoints.length - 1];
       cpId = lastCp.id;
       cpLabel = lastCp.label;
     }
 
-    await engine.branch(name, cpId);
+    const newBranch = await engine.branch(name, cpId);
     success(`Branch ${brand.bold(`"${name}"`)} created from ${dim(`"${cpLabel}"`)}`);
 
     if (cpId) {
       const summary = await engine.restoreCheckpoint(cpId, cwd);
+      // restoreCheckpoint switches to the checkpoint's parent branch as a side-effect — switch back
+      await engine.switchBranch(newBranch.id);
       if (summary) {
         detail('restored', `${summary.written.length} written, ${summary.deleted.length} deleted, ${summary.skipped.length} unchanged`);
       }
@@ -285,10 +436,19 @@ program
     const contextPath = generateContextFile(cwd, name, context);
     detail('context', path.relative(cwd, contextPath));
 
-    divider();
-    console.log(`  ${warn('⚡')} ${chalk.white('Next steps:')}`);
-    console.log(`     1. Restart OpenCode ${dim('(quit and reopen)')}`);
-    console.log(`     2. Tell it: ${info('"Read .variantree/branch-context.md for context"')}`);
+    if (opts.launch !== false) {
+      divider();
+      const result = launchOpenCodeSession(cwd);
+      if (result.launched) {
+        console.log(`  ${ARROW} Opening new OpenCode session...`);
+      } else {
+        hint('Could not launch OpenCode automatically.');
+        nextSteps();
+      }
+    } else {
+      divider();
+      nextSteps();
+    }
     divider();
   });
 
@@ -297,10 +457,28 @@ program
   .command('restore <label>')
   .description('Restore code to a checkpoint + generate context')
   .option('-d, --dir <path>', 'workspace directory', process.cwd())
+  .option('--force', 'skip the unsaved-work checkpoint prompt')
+  .option('--no-launch', 'skip auto-launching a new OpenCode session')
   .action(async (label: string, opts) => {
     const cwd = path.resolve(opts.dir);
     header('restore');
     const { engine } = await ensureWorkspace(cwd);
+    await syncConversation(engine, cwd);
+
+    // Guard: prompt if there are messages on this branch not yet captured in a checkpoint
+    if (!opts.force) {
+      const unsaved = countUnsavedMessages(engine);
+      if (unsaved > 0) {
+        const answer = await promptConfirm(
+          `  ${warn(`${unsaved} message(s) are not checkpointed and will be lost after restore.`)} Checkpoint now? ${dim('[Y/n]')} `
+        );
+        if (answer) {
+          const autoLabel = `Auto: before restore to "${label}"`;
+          await engine.createCheckpoint(autoLabel, { workspacePath: cwd });
+          success(`Checkpoint ${chalk.white.bold(`"${autoLabel}"`)} created`);
+        }
+      }
+    }
 
     const checkpoints = engine.getCheckpoints();
     const cp = checkpoints.find((c) => c.label === label);
@@ -321,10 +499,19 @@ program
     const contextPath = generateContextFile(cwd, branchName, context);
     detail('context', path.relative(cwd, contextPath));
 
-    divider();
-    console.log(`  ${warn('⚡')} ${chalk.white('Next steps:')}`);
-    console.log(`     1. Restart OpenCode ${dim('(quit and reopen)')}`);
-    console.log(`     2. Tell it: ${info('"Read .variantree/branch-context.md for context"')}`);
+    if (opts.launch !== false) {
+      divider();
+      const result = launchOpenCodeSession(cwd);
+      if (result.launched) {
+        console.log(`  ${ARROW} Opening new OpenCode session...`);
+      } else {
+        hint('Could not launch OpenCode automatically.');
+        nextSteps();
+      }
+    } else {
+      divider();
+      nextSteps();
+    }
     divider();
   });
 
@@ -352,33 +539,18 @@ program
 
     header('status');
 
-    // Branch info
     console.log(`  ${BRANCH_ICON}  ${chalk.white.bold(branch.name)}  ${dim(`(${context.length} messages)`)}`);
     divider();
 
-    // All branches
-    if (branches.length > 1) {
-      console.log(`  ${dim('Branches')}`);
-      for (const b of branches) {
-        const active = b.isActive ? accent(' ← active') : '';
-        const icon = b.isActive ? accent('●') : dim('○');
-        console.log(`    ${icon} ${b.name} ${dim(`(${b.messageCount} msgs)`)}${active}`);
-      }
-      divider();
+    // Hierarchical tree
+    const root = branches.find(b => !b.parentCheckpointId);
+    if (root) {
+      printBranchNode(root, branches, checkpoints, '', true);
     }
 
-    // Checkpoints
-    if (checkpoints.length === 0) {
-      console.log(`  ${dim('No checkpoints yet.')}`);
-      hint(`Run ${chalk.white('variantree checkpoint "label"')} to save your progress.`);
-    } else {
-      console.log(`  ${dim('Checkpoints')}`);
-      for (const cp of checkpoints.slice(-8)) {
-        const snap = cp.snapshot ? ` ${SNAP_ICON}` : '';
-        const time = dim(formatTime(cp.createdAt));
-        console.log(`    ${DOT} ${chalk.white(cp.label)}${snap}  ${time}`);
-      }
-    }
+    divider();
+    const snapshotCount = checkpoints.filter(cp => cp.snapshotRef).length;
+    hint(`${branches.length} branch${branches.length !== 1 ? 'es' : ''} · ${checkpoints.length} checkpoint${checkpoints.length !== 1 ? 's' : ''}${snapshotCount > 0 ? ` (${snapshotCount} with snapshots)` : ''}`);
     divider();
   });
 
@@ -403,28 +575,11 @@ program
 
     header('tree');
 
-    for (let i = 0; i < branches.length; i++) {
-      const b = branches[i];
-      const isLast = i === branches.length - 1;
-      const prefix = i === 0 ? accent('●') : dim('○');
-      const nameColor = b.isActive ? accent : chalk.white;
-      const activeTag = b.isActive ? accent(' ← you are here') : '';
-
-      console.log(`  ${prefix} ${nameColor.bold(b.name)}${activeTag} ${dim(`(${b.messageCount} msgs)`)}`);
-
-      // Show checkpoints on this branch
-      const branchCps = checkpoints.filter((cp) => cp.branchId === b.id);
-      for (let j = 0; j < branchCps.length; j++) {
-        const cp = branchCps[j];
-        const cpIsLast = j === branchCps.length - 1 && isLast;
-        const connector = cpIsLast ? TREE_END : TREE_FORK;
-        const snap = cp.snapshot ? ` ${SNAP_ICON}` : '';
-        console.log(`  ${TREE_VERT}  ${connector} ${warn(cp.label)}${snap}`);
-      }
-
-      if (!isLast) {
-        console.log(`  ${TREE_VERT}`);
-      }
+    const root = branches.find(b => !b.parentCheckpointId);
+    if (root) {
+      printBranchNode(root, branches, checkpoints, '', true);
+    } else {
+      hint('No branches found.');
     }
     divider();
   });
@@ -443,7 +598,7 @@ program
       workspacePath: cwd,
       adapter: new OpenCodeAdapter(),
       engine,
-      onSync: (count) => console.log(`  ${MSG_ICON} Synced ${accent(String(count))} message(s)`),
+      onSync: (count) => console.log(`  ${CHECK} Synced ${accent(String(count))} message(s)`),
       onError: (e) => console.error(`  ${CROSS} ${e.message}`),
     });
 

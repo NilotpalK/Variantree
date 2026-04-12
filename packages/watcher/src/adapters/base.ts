@@ -22,4 +22,16 @@ export interface SessionAdapter {
    * Must be pure — no side effects, called on every file change event.
    */
   parseMessages(raw: string): Message[];
+
+  /**
+   * Get the ID of the most recently active session for a workspace directory.
+   * Returns null if no session exists. Used for session-aware sync.
+   */
+  getCurrentSessionId?(workspacePath: string): Promise<string | null>;
+
+  /**
+   * Read messages async, optionally scoped to a specific session ID.
+   * When sessionId is provided, only messages from that session are returned.
+   */
+  readMessagesAsync?(workspacePath?: string, sessionId?: string): Promise<Message[]>;
 }
