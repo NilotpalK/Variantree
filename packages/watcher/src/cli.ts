@@ -14,11 +14,10 @@ import readline from 'node:readline';
 import { VariantTree } from '@variantree/core';
 import { NodeStorage } from './node/storage.js';
 import { GitSnapshotProvider } from './node/git-snapshot.js';
-import { OpenCodeAdapter } from './adapters/opencode.js';
-import { MessageDiffer } from './differ.js';
 import { VariantreeWatcher } from './watcher.js';
 import { launchOpenCodeSession } from './node/session-launcher.js';
-import { mergeAgentsMd } from './agents-md.js';
+import { ensureProjectInstructions, VARIANTREE_MARKER, ALL_TOOLS } from './tools/index.js';
+import { syncConversation } from './sync.js';
 
 // ─── Theme ────────────────────────────────────────────────────────────────
 
@@ -165,44 +164,6 @@ async function ensureWorkspace(cwd: string) {
   return { engine, storage };
 }
 
-/** Sync the latest conversation from OpenCode's SQLite into the Variantree branch. */
-async function syncConversation(engine: VariantTree, cwd: string) {
-  const adapter = new OpenCodeAdapter();
-  const workspace = engine.getWorkspace();
-
-  // Gate 1: session ID tracking — pin the workspace to a specific OpenCode session.
-  let sessionId = workspace.openCodeSessionId;
-  if (!sessionId) {
-    const currentId = await adapter.getCurrentSessionId(cwd);
-    if (!currentId) return 0;
-    await engine.setOpenCodeSessionId(currentId);
-    sessionId = currentId;
-  }
-
-  let messages = await adapter.readMessagesAsync(cwd, sessionId);
-
-  // Fallback: stored session may be stale (user started a new OpenCode session).
-  // Re-discover the current session and retry.
-  if (messages.length === 0) {
-    const freshId = await adapter.getCurrentSessionId(cwd);
-    if (!freshId || freshId === sessionId) return 0;
-    await engine.setOpenCodeSessionId(freshId);
-    sessionId = freshId;
-    messages = await adapter.readMessagesAsync(cwd, sessionId);
-  }
-  if (messages.length === 0) return 0;
-
-  const existing = engine.getContext();
-  const differ = new MessageDiffer();
-  differ.diff(existing);
-  const newMessages = differ.diff(messages);
-
-  for (const msg of newMessages) {
-    await engine.addMessage(msg.role, msg.content, { source: 'opencode' });
-  }
-  return newMessages.length;
-}
-
 /** Generate .variantree/branch-context.md */
 function generateContextFile(cwd: string, branchName: string, messages: Array<{ role: string; content: string }>) {
   const contextDir = path.join(cwd, '.variantree');
@@ -332,18 +293,18 @@ program
     }
 
     // Write or merge AGENTS.md with Variantree standing instructions
-    const agentsPath = path.join(cwd, 'AGENTS.md');
     try {
-      let existing: string | null = null;
-      try { existing = fsSync.readFileSync(agentsPath, 'utf8'); } catch {}
-      if (existing?.includes('<!-- variantree:agents -->')) {
-        hint('AGENTS.md already has Variantree instructions');
+      const agentsPath = path.join(cwd, 'AGENTS.md');
+      const existing = (() => { try { return fsSync.readFileSync(agentsPath, 'utf8'); } catch { return null; } })();
+      const alreadyDone = existing?.includes(VARIANTREE_MARKER);
+      ensureProjectInstructions(cwd);
+      if (alreadyDone) {
+        hint('Instruction files already up to date (AGENTS.md, CLAUDE.md)');
       } else {
-        fsSync.writeFileSync(agentsPath, mergeAgentsMd(existing), 'utf8');
-        success(existing ? 'Variantree instructions added to existing AGENTS.md' : 'Created AGENTS.md with Variantree instructions');
+        success('Created instruction files: AGENTS.md, CLAUDE.md');
       }
     } catch {
-      hint('Could not write AGENTS.md.');
+      hint('Could not write instruction files.');
     }
 
     hint(`Run ${chalk.white('variantree checkpoint "label"')} after coding to save your progress`);
@@ -594,9 +555,14 @@ program
     header('watch');
     const { engine } = await ensureWorkspace(cwd);
 
+    // Use the pinned adapter if one exists, otherwise fall back to the first registered adapter.
+    const adapters = ALL_TOOLS.flatMap(t => (t.adapter ? [t.adapter] : []));
+    const pinnedAdapter = adapters.find(a => engine.getSessionId(a.name) != null);
+    const adapter = pinnedAdapter ?? adapters[0];
+
     const watcher = new VariantreeWatcher({
       workspacePath: cwd,
-      adapter: new OpenCodeAdapter(),
+      adapter,
       engine,
       onSync: (count) => console.log(`  ${CHECK} Synced ${accent(String(count))} message(s)`),
       onError: (e) => console.error(`  ${CROSS} ${e.message}`),
