@@ -1,20 +1,19 @@
 /**
  * @variantree/watcher — VariantreeWatcher
  *
- * Watches a session file using chokidar (push-based, same as VS Code).
+ * Watches an AI tool's session for new messages using chokidar.
  * On every change event:
- *   1. Reads and parses the session file via the adapter
+ *   1. Reads messages via the adapter's readMessagesAsync
  *   2. Diffs to find new messages
  *   3. Adds new messages to the active Variantree branch
- *
- * Falls back to a 2s polling interval for editors/filesystems that
- * don't emit reliable fs.watch events.
  */
 
 import chokidar, { type FSWatcher } from 'chokidar';
-import fs from 'node:fs/promises';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { VariantTree } from '@variantree/core';
-import type { SessionAdapter } from './adapters/base.js';
+import type { SessionAdapter } from './tools/base.js';
 import { MessageDiffer } from './differ.js';
 
 export interface WatcherOptions {
@@ -34,6 +33,7 @@ export class VariantreeWatcher {
   private watcher: FSWatcher | null = null;
   private readonly differ = new MessageDiffer();
   private readonly opts: WatcherOptions;
+  private sessionId: string | null = null;
 
   constructor(opts: WatcherOptions) {
     this.opts = opts;
@@ -42,53 +42,49 @@ export class VariantreeWatcher {
   async start(): Promise<void> {
     const { workspacePath, adapter, engine, onSync, onError } = this.opts;
 
-    const sessionFile = await adapter.findSessionFile(workspacePath);
-    if (!sessionFile) {
+    this.sessionId = await adapter.getCurrentSessionId(workspacePath);
+    if (!this.sessionId) {
       console.warn(`[variantree] No ${adapter.name} session found for ${workspacePath}`);
       return;
     }
 
-    console.log(`[variantree] Watching ${adapter.name} session: ${sessionFile}`);
+    // For OpenCode: watch the WAL file (changes on every DB write)
+    // For Claude Code: watch the JSONL session file directly
+    const watchTarget = this.resolveWatchTarget(workspacePath);
+    console.log(`[variantree] Watching ${adapter.name} session for ${workspacePath}`);
 
     const sync = async () => {
       try {
-        // For SQLite-backed adapters (OpenCode), read directly from DB
-        // For file-based adapters (Aider, Claude Code), read file then parse
-        let allMessages;
-        if ('readMessagesAsync' in adapter && typeof (adapter as any).readMessagesAsync === 'function') {
-          allMessages = await (adapter as any).readMessagesAsync(workspacePath);
-        } else {
-          const raw = await fs.readFile(sessionFile, 'utf8');
-          allMessages = adapter.parseMessages(raw);
+        // Re-discover session on each tick in case a new session started
+        const currentId = await adapter.getCurrentSessionId(workspacePath);
+        if (currentId && currentId !== this.sessionId) {
+          this.sessionId = currentId;
+          this.differ.reset();
         }
+        if (!this.sessionId) return;
+
+        const allMessages = await adapter.readMessagesAsync(workspacePath, this.sessionId);
         const newMessages = this.differ.diff(allMessages);
 
         for (const msg of newMessages) {
           await engine.addMessage(msg.role, msg.content, { source: adapter.name });
         }
-
-        if (newMessages.length > 0) {
-          onSync?.(newMessages.length);
-        }
+        if (newMessages.length > 0) onSync?.(newMessages.length);
       } catch (err) {
         onError?.(err instanceof Error ? err : new Error(String(err)));
       }
     };
 
-    this.watcher = chokidar.watch(sessionFile, {
+    this.watcher = chokidar.watch(watchTarget, {
       persistent: true,
-      usePolling: false,       // event-driven primary
-      interval: 2000,          // polling fallback interval
-      awaitWriteFinish: {
-        stabilityThreshold: 100,  // wait for write to settle before reading
-        pollInterval: 50,
-      },
+      usePolling: false,
+      interval: 2000,
+      awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
     });
 
     this.watcher.on('change', sync);
     this.watcher.on('error', (err) => onError?.(err instanceof Error ? err : new Error(String(err))));
 
-    // Do an initial sync in case session file already has messages
     await sync();
   }
 
@@ -97,5 +93,21 @@ export class VariantreeWatcher {
     this.watcher = null;
     this.differ.reset();
     console.log('[variantree] Watcher stopped');
+  }
+
+  /**
+   * Pick the best file to watch for changes.
+   * OpenCode: the WAL file changes on every DB write.
+   * Claude Code: the session JSONL file itself.
+   * Fallback: poll the workspace directory.
+   */
+  private resolveWatchTarget(workspacePath: string): string {
+    const ocWal = path.join(
+      process.env.XDG_DATA_HOME ?? path.join(os.homedir(), '.local', 'share'),
+      'opencode', 'opencode.db-wal',
+    );
+    if (fs.existsSync(ocWal)) return ocWal;
+    if (this.sessionId && fs.existsSync(this.sessionId)) return this.sessionId;
+    return workspacePath;
   }
 }

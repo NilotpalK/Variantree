@@ -1,55 +1,65 @@
 #!/usr/bin/env node
 /**
- * Postinstall script — registers the Variantree MCP server in
- * OpenCode's global config (~/.config/opencode/opencode.json).
+ * Postinstall script — registers the Variantree MCP server in all supported
+ * AI tool global configs (OpenCode, Claude Code).
  *
  * Runs automatically after `npm install -g @variantree/watcher`.
- * Safe to re-run: skips if the entry already exists.
+ * Each registration is idempotent — skips if already configured.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-const MCP_ENTRY = {
-  type: 'local',
-  command: ['npx', '-y', '@variantree/mcp'],
-  environment: { VARIANTREE_DIR: '.' },
-};
+const MCP_COMMAND_NPXARGS = ['-y', '@variantree/mcp'];
+const MCP_ENV = { VARIANTREE_DIR: '.' };
 
-function getGlobalConfigPath() {
+// ─── OpenCode ────────────────────────────────────────────────────────────────
+
+function registerOpenCode() {
   const configDir = process.env.XDG_CONFIG_HOME
     ?? path.join(os.homedir(), '.config');
-  return path.join(configDir, 'opencode', 'opencode.json');
-}
-
-function run() {
-  const configPath = getGlobalConfigPath();
-  const configDir = path.dirname(configPath);
+  const configPath = path.join(configDir, 'opencode', 'opencode.json');
 
   let config = {};
-  try {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    config = JSON.parse(raw);
-  } catch {
-    // File doesn't exist or is invalid — start fresh
-  }
+  try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
 
   if (!config.mcp) config.mcp = {};
-  if (config.mcp.variantree) {
-    // Already registered — don't overwrite user customisations
-    return;
-  }
+  if (config.mcp.variantree) return;
 
-  config.mcp.variantree = MCP_ENTRY;
+  config.mcp.variantree = {
+    type: 'local',
+    command: ['npx', ...MCP_COMMAND_NPXARGS],
+    environment: MCP_ENV,
+  };
 
-  fs.mkdirSync(configDir, { recursive: true });
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
-  console.log('[variantree] MCP server registered in', configPath);
+  console.log('[variantree] OpenCode: MCP server registered in', configPath);
 }
 
-try {
-  run();
-} catch {
-  // Postinstall must never break `npm install` — fail silently
+// ─── Claude Code ─────────────────────────────────────────────────────────────
+
+function registerClaudeCode() {
+  const configPath = path.join(os.homedir(), '.claude.json');
+
+  let config = {};
+  try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
+
+  if (!config.mcpServers) config.mcpServers = {};
+  if (config.mcpServers.variantree) return;
+
+  config.mcpServers.variantree = {
+    command: 'npx',
+    args: MCP_COMMAND_NPXARGS,
+    env: MCP_ENV,
+  };
+
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+  console.log('[variantree] Claude Code: MCP server registered in', configPath);
 }
+
+// ─── Run ─────────────────────────────────────────────────────────────────────
+
+try { registerOpenCode(); } catch {}
+try { registerClaudeCode(); } catch {}

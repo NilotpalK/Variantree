@@ -15,7 +15,7 @@ import os from 'node:os';
 import { VariantTree } from '@variantree/core';
 import { NodeStorage } from '../node/storage.js';
 import { GitSnapshotProvider } from '../node/git-snapshot.js';
-import { mergeAgentsMd } from '../agents-md.js';
+import { mergeAgentsMd } from '../tools/opencode/instructions.js';
 
 const WORKSPACE_ID = 'test';
 
@@ -242,7 +242,7 @@ describe('AGENTS.md merge logic', () => {
   it('creates new file when none exists', () => {
     const result = mergeAgentsMd(null);
     expect(result).toContain('# AGENTS');
-    expect(result).toContain('<!-- variantree:agents -->');
+    expect(result).toContain('<!-- variantree:instructions -->');
     expect(result).toContain('When to checkpoint');
     expect(result).toContain('Presenting results to the user');
   });
@@ -252,11 +252,11 @@ describe('AGENTS.md merge logic', () => {
     const result = mergeAgentsMd(existing);
     expect(result).toContain('# My Project');
     expect(result).toContain('Some existing rules.');
-    expect(result).toContain('<!-- variantree:agents -->');
+    expect(result).toContain('<!-- variantree:instructions -->');
   });
 
   it('replaces existing variantree section', () => {
-    const existing = '# My Project\n\n<!-- variantree:agents -->\nOLD CONTENT\n<!-- variantree:agents -->\n\nOther stuff.\n';
+    const existing = '# My Project\n\n<!-- variantree:instructions -->\nOLD CONTENT\n<!-- variantree:instructions -->\n\nOther stuff.\n';
     const result = mergeAgentsMd(existing);
     expect(result).not.toContain('OLD CONTENT');
     expect(result).toContain('When to checkpoint');
@@ -265,7 +265,7 @@ describe('AGENTS.md merge logic', () => {
 
   it('does not duplicate markers', () => {
     const result = mergeAgentsMd(null);
-    const markerCount = (result.match(/<!-- variantree:agents -->/g) || []).length;
+    const markerCount = (result.match(/<!-- variantree:instructions -->/g) || []).length;
     expect(markerCount).toBe(2);
   });
 });

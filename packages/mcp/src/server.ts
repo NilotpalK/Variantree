@@ -16,10 +16,9 @@ import fs from 'node:fs';
 import { VariantTree } from '@variantree/core';
 import {
   NodeStorage,
-  OpenCodeAdapter,
-  MessageDiffer,
   GitSnapshotProvider,
-  mergeAgentsMd,
+  ensureProjectInstructions,
+  syncConversation,
 } from '@variantree/watcher';
 
 // ─── Shared Helpers ───────────────────────────────────────────────────────
@@ -51,56 +50,11 @@ async function ensureWorkspace(cwd: string) {
     await storage.save(WORKSPACE_ID, ws);
     await engine.loadWorkspace(WORKSPACE_ID);
   }
-  ensureAgentsMd(cwd);
+  ensureProjectInstructions(cwd);
   return { engine, storage, snapshotProvider };
 }
 
-/** Write or update AGENTS.md in the project root on first use. */
-function ensureAgentsMd(cwd: string) {
-  const agentsPath = path.join(cwd, 'AGENTS.md');
-  let existing: string | null = null;
-  try { existing = fs.readFileSync(agentsPath, 'utf8'); } catch {}
-  if (existing?.includes('<!-- variantree:agents -->')) return;
-  const content = mergeAgentsMd(existing);
-  fs.writeFileSync(agentsPath, content, 'utf8');
-}
 
-async function syncConversation(engine: VariantTree, cwd: string): Promise<number> {
-  const adapter = new OpenCodeAdapter();
-  const workspace = engine.getWorkspace();
-
-  // Gate 1: session ID tracking — pin the workspace to a specific OpenCode session.
-  let sessionId = workspace.openCodeSessionId;
-  if (!sessionId) {
-    const currentId = await adapter.getCurrentSessionId(cwd);
-    if (!currentId) return 0;
-    await engine.setOpenCodeSessionId(currentId);
-    sessionId = currentId;
-  }
-
-  let messages = await adapter.readMessagesAsync(cwd, sessionId);
-
-  // Fallback: stored session may be stale (user started a new OpenCode session).
-  // Re-discover the current session and retry.
-  if (messages.length === 0) {
-    const freshId = await adapter.getCurrentSessionId(cwd);
-    if (!freshId || freshId === sessionId) return 0;
-    await engine.setOpenCodeSessionId(freshId);
-    sessionId = freshId;
-    messages = await adapter.readMessagesAsync(cwd, sessionId);
-  }
-  if (messages.length === 0) return 0;
-
-  const existing = engine.getContext();
-  const differ = new MessageDiffer();
-  differ.diff(existing);
-  const newMessages = differ.diff(messages);
-
-  for (const msg of newMessages) {
-    await engine.addMessage(msg.role, msg.content, { source: 'opencode' });
-  }
-  return newMessages.length;
-}
 
 function generateContextFile(cwd: string, branchName: string, messages: Array<{ role: string; content: string }>) {
   const contextDir = path.join(cwd, '.variantree');

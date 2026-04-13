@@ -103,10 +103,16 @@ export interface Workspace {
   updatedAt: number;
   /**
    * The OpenCode session ID this workspace is tracking.
+   * @deprecated Use sessionIds['opencode'] instead. Kept for backward compatibility.
+   */
+  openCodeSessionId?: string;
+
+  /**
+   * Per-adapter session IDs. Keyed by adapter name (e.g. "opencode", "claudecode").
    * Set on first sync. Used to avoid re-importing messages from old sessions
    * when a project folder is deleted and recreated at the same path.
    */
-  openCodeSessionId?: string;
+  sessionIds?: Record<string, string>;
 }
 
 // ─── Storage ─────────────────────────────────────────────────────────────────

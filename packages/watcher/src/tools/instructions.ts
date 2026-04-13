@@ -1,15 +1,13 @@
 /**
- * @variantree/watcher — AGENTS.md content
+ * Canonical standing-instructions text for Variantree.
  *
- * Standing instructions written to the project root so OpenCode (and
- * compatible tools) know when and how to use Variantree proactively.
- *
- * Shared between `variantree init` (CLI) and the MCP server bootstrap.
+ * This is the single source of truth. Each tool module uses the marker +
+ * body to write into its own file format (AGENTS.md, CLAUDE.md, etc.).
  */
 
-const MARKER = '<!-- variantree:agents -->';
+export const VARIANTREE_MARKER = '<!-- variantree:instructions -->';
 
-export const AGENTS_MD_SECTION = `${MARKER}
+export const VARIANTREE_INSTRUCTIONS_BODY = `\
 ## Variantree — AI Version Control
 
 You have access to Variantree MCP tools for managing conversation context and
@@ -67,32 +65,37 @@ summarise or omit details. Specifically:
 | restore     | Restore code to a specific checkpoint         |
 | status      | Show active branch, checkpoints               |
 | tree        | ASCII tree of branches and checkpoints        |
-| log         | Show conversation history for a branch        |
-${MARKER}`;
+| log         | Show conversation history for a branch        |`;
+
+/** The full fenced section, ready to embed in any markdown file. */
+export const VARIANTREE_INSTRUCTIONS_SECTION =
+  `${VARIANTREE_MARKER}\n${VARIANTREE_INSTRUCTIONS_BODY}\n${VARIANTREE_MARKER}`;
 
 /**
- * Write or merge the Variantree section into an AGENTS.md file.
+ * Merge the Variantree instructions section into an existing file's content.
  *
- * - If the file doesn't exist, creates it.
- * - If it exists but has no Variantree section, appends.
- * - If it already has the section, replaces it (safe update).
+ * - No existing content → wraps in a minimal markdown document.
+ * - Content without the marker → appends the section.
+ * - Content with the marker → replaces the section in-place.
  */
-export function mergeAgentsMd(existingContent: string | null): string {
+export function mergeInstructions(existingContent: string | null, heading: string): string {
+  const section = VARIANTREE_INSTRUCTIONS_SECTION;
+
   if (!existingContent) {
-    return `# AGENTS\n\n${AGENTS_MD_SECTION}\n`;
+    return `# ${heading}\n\n${section}\n`;
   }
 
-  const markerStart = existingContent.indexOf(MARKER);
-  if (markerStart === -1) {
-    return existingContent.trimEnd() + '\n\n' + AGENTS_MD_SECTION + '\n';
+  const start = existingContent.indexOf(VARIANTREE_MARKER);
+  if (start === -1) {
+    return existingContent.trimEnd() + '\n\n' + section + '\n';
   }
 
-  const markerEnd = existingContent.indexOf(MARKER, markerStart + MARKER.length);
-  if (markerEnd === -1) {
-    return existingContent.trimEnd() + '\n\n' + AGENTS_MD_SECTION + '\n';
+  const end = existingContent.indexOf(VARIANTREE_MARKER, start + VARIANTREE_MARKER.length);
+  if (end === -1) {
+    return existingContent.trimEnd() + '\n\n' + section + '\n';
   }
 
-  const before = existingContent.slice(0, markerStart);
-  const after = existingContent.slice(markerEnd + MARKER.length);
-  return before + AGENTS_MD_SECTION + after;
+  const before = existingContent.slice(0, start);
+  const after = existingContent.slice(end + VARIANTREE_MARKER.length);
+  return before + section + after;
 }
