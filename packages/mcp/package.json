@@ -26,10 +26,13 @@
     "model-context-protocol"
   ],
   "license": "PolyForm-Noncommercial-1.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "@variantree/core": "*",
-    "@variantree/watcher": "*",
+    "@variantree/core": "^0.1.0",
+    "@variantree/watcher": "^0.1.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
