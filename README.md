@@ -55,46 +55,18 @@ Traditional version control is built for humans running commands. Variantree is 
 
 ## Installation
 
-> **Requirements:** Node.js 18+, Git
-
-### OpenCode
-
 ```bash
 npm install -g @variantree/watcher
 ```
 
-The postinstall script automatically registers the Variantree MCP server in your OpenCode global config (`~/.config/opencode/config.json`). Open any project in OpenCode and start chatting — Variantree activates on the first tool call.
+That's it — one package for all supported tools. The installer automatically registers the Variantree MCP server in the global config for **both OpenCode and Claude Code**. Open any project and start chatting — Variantree activates on the first tool call.
 
-### Claude Code
+| Tool | What gets configured |
+|---|---|
+| [OpenCode](https://opencode.ai) | `~/.config/opencode/opencode.json` → `mcp.variantree` |
+| [Claude Code](https://claude.ai/code) | `~/.claude.json` → `mcpServers.variantree` |
 
-Install the MCP server package:
-
-```bash
-npm install -g @variantree/mcp
-```
-
-Then register it with Claude Code:
-
-```bash
-claude mcp add variantree -- variantree-mcp
-```
-
-Or add it manually to your Claude Code config (`~/.claude.json`):
-
-```json
-{
-  "mcpServers": {
-    "variantree": {
-      "type": "stdio",
-      "command": "variantree-mcp"
-    }
-  }
-}
-```
-
-### More tools coming soon
-
-Support for additional MCP-compatible AI coding tools is planned. Check back for updates.
+> **Requirements:** Node.js 18+
 
 ---
 
@@ -162,11 +134,11 @@ Branches are linked: if `class-based` was created from `todo-basic` on `main`, t
 
 This is a monorepo with three packages:
 
-| Package | Description |
-|---|---|
-| [`@variantree/core`](packages/core) | Core engine — workspace, branch, checkpoint, and context logic |
-| [`@variantree/watcher`](packages/watcher) | OpenCode adapter, CLI (`variantree`), file watcher, Git snapshot provider |
-| [`@variantree/mcp`](packages/mcp) | MCP server that exposes Variantree tools to AI assistants |
+| Package | Install? | Description |
+|---|---|---|
+| [`@variantree/core`](packages/core) | No | Core engine — workspace, branch, checkpoint, and context logic |
+| [`@variantree/watcher`](packages/watcher) | **`npm i -g`** | CLI + adapters for OpenCode \& Claude Code. Auto-registers MCP on install. |
+| [`@variantree/mcp`](packages/mcp) | No | MCP server binary — invoked automatically by AI tools, not by users directly |
 
 ### CLI
 
