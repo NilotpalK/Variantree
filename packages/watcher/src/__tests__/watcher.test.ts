@@ -1,6 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MessageDiffer } from '../differ.js';
-import { OpenCodeAdapter } from '../adapters/opencode.js';
+import { OpenCodeAdapter } from '../tools/opencode/adapter.js';
+import { ClaudeCodeAdapter } from '../tools/claudecode/adapter.js';
+import { ensureProjectInstructions } from '../tools/index.js';
+import { VARIANTREE_MARKER } from '../tools/instructions.js';
 import { NodeStorage } from '../node/storage.js';
 import Database from 'better-sqlite3';
 import fs from 'node:fs/promises';
@@ -32,7 +35,7 @@ describe('MessageDiffer', () => {
     const msgs1 = [
       { id: '1', role: 'user' as const, content: 'hello', timestamp: 1 },
     ];
-    differ.diff(msgs1); // first sync
+    differ.diff(msgs1);
 
     const msgs2 = [
       { id: '1', role: 'user' as const, content: 'hello', timestamp: 1 },
@@ -53,8 +56,7 @@ describe('MessageDiffer', () => {
   });
 
   it('should handle multiple new messages', () => {
-    differ.diff([]); // start empty
-
+    differ.diff([]);
     const msgs = [
       { id: '1', role: 'user' as const, content: 'a', timestamp: 1 },
       { id: '2', role: 'assistant' as const, content: 'b', timestamp: 2 },
@@ -71,13 +73,13 @@ describe('MessageDiffer', () => {
     differ.diff(msgs);
     differ.reset();
     const result = differ.diff(msgs);
-    expect(result).toHaveLength(1); // sees all messages again
+    expect(result).toHaveLength(1);
   });
 });
 
-// ─── OpenCode Adapter (SQLite Integration) ────────────────────────────────
+// ─── OpenCodeAdapter ─────────────────────────────────────────────────────
 
-describe('OpenCodeAdapter (SQLite)', () => {
+describe('OpenCodeAdapter', () => {
   let tmpDir: string;
   let dbPath: string;
 
@@ -86,7 +88,10 @@ describe('OpenCodeAdapter (SQLite)', () => {
     dbPath = path.join(tmpDir, 'opencode.db');
   });
 
-  /** Create a test SQLite database with OpenCode's schema and sample data. */
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
   function createTestDb(workspaceDir: string, messages: Array<{
     role: string;
     content: string;
@@ -143,125 +148,246 @@ describe('OpenCodeAdapter (SQLite)', () => {
       1000, ?, NULL, NULL, NULL
     )`).run(workspaceDir, lastTime);
 
-    const insertMsg = db.prepare(
-      `INSERT INTO message VALUES (?, 'ses_test1', ?, ?, ?)`
-    );
-    const insertPart = db.prepare(
-      `INSERT INTO part VALUES (?, ?, 'ses_test1', ?, ?, ?)`
-    );
+    const insertMsg = db.prepare(`INSERT INTO message VALUES (?, 'ses_test1', ?, ?, ?)`);
+    const insertPart = db.prepare(`INSERT INTO part VALUES (?, ?, 'ses_test1', ?, ?, ?)`);
 
     messages.forEach((msg, i) => {
       const msgId = `msg_${i}`;
-      const msgData = JSON.stringify({ role: msg.role, time: { created: msg.time } });
-      insertMsg.run(msgId, msg.time, msg.time, msgData);
-
-      const partData = JSON.stringify({ type: 'text', text: msg.content });
-      insertPart.run(`prt_${i}`, msgId, msg.time, msg.time, partData);
+      insertMsg.run(msgId, msg.time, msg.time, JSON.stringify({ role: msg.role }));
+      insertPart.run(`prt_${i}`, msgId, msg.time, msg.time, JSON.stringify({ type: 'text', text: msg.content }));
     });
 
     db.close();
   }
 
-  it('should read messages from a SQLite database', async () => {
-    const workspaceDir = '/test/workspace';
-    createTestDb(workspaceDir, [
+  function makeAdapter() {
+    const adapter = new OpenCodeAdapter();
+    (adapter as any).getDbPath = () => dbPath;
+    return adapter;
+  }
+
+  it('has correct adapter name', () => {
+    expect(new OpenCodeAdapter().name).toBe('opencode');
+  });
+
+  it('reads messages from SQLite', async () => {
+    createTestDb('/test/ws', [
       { role: 'user', content: 'Add JWT auth', time: 1000 },
       { role: 'assistant', content: 'Here is the middleware...', time: 2000 },
     ]);
-
-    // Create adapter pointing to our test DB
-    const adapter = new OpenCodeAdapter();
-    // Override the DB path for testing
-    (adapter as any).getDbPath = () => dbPath;
-
-    const result = await adapter.readMessagesAsync(workspaceDir);
+    const result = await makeAdapter().readMessagesAsync('/test/ws');
     expect(result).toHaveLength(2);
     expect(result[0].role).toBe('user');
     expect(result[0].content).toBe('Add JWT auth');
     expect(result[1].role).toBe('assistant');
-    expect(result[1].content).toBe('Here is the middleware...');
   });
 
-  it('should preserve message order by time_created', async () => {
-    const workspaceDir = '/test/workspace';
-    createTestDb(workspaceDir, [
+  it('preserves message order by time_created', async () => {
+    createTestDb('/test/ws', [
       { role: 'user', content: 'first', time: 100 },
       { role: 'assistant', content: 'second', time: 200 },
       { role: 'user', content: 'third', time: 300 },
     ]);
-
-    const adapter = new OpenCodeAdapter();
-    (adapter as any).getDbPath = () => dbPath;
-
-    const result = await adapter.readMessagesAsync(workspaceDir);
-    expect(result).toHaveLength(3);
-    expect(result[0].content).toBe('first');
-    expect(result[1].content).toBe('second');
-    expect(result[2].content).toBe('third');
+    const result = await makeAdapter().readMessagesAsync('/test/ws');
+    expect(result.map(m => m.content)).toEqual(['first', 'second', 'third']);
   });
 
-  it('should map user role correctly', async () => {
-    const workspaceDir = '/test/workspace';
-    createTestDb(workspaceDir, [
-      { role: 'user', content: 'hello', time: 100 },
-      { role: 'assistant', content: 'hi', time: 200 },
-    ]);
-
-    const adapter = new OpenCodeAdapter();
-    (adapter as any).getDbPath = () => dbPath;
-
-    const result = await adapter.readMessagesAsync(workspaceDir);
-    expect(result[0].role).toBe('user');
-    expect(result[1].role).toBe('assistant');
-  });
-
-  it('should return empty for non-existent workspace directory', async () => {
-    createTestDb('/some/other/path', [
-      { role: 'user', content: 'hello', time: 100 },
-    ]);
-
-    const adapter = new OpenCodeAdapter();
-    (adapter as any).getDbPath = () => dbPath;
-
-    const result = await adapter.readMessagesAsync('/non/existent/path');
+  it('returns empty for wrong workspace directory', async () => {
+    createTestDb('/some/other/path', [{ role: 'user', content: 'hello', time: 100 }]);
+    const result = await makeAdapter().readMessagesAsync('/non/existent/path');
     expect(result).toHaveLength(0);
   });
 
-  it('should return empty when DB does not exist', async () => {
+  it('returns empty when DB does not exist', async () => {
     const adapter = new OpenCodeAdapter();
-    (adapter as any).getDbPath = () => '/tmp/nonexistent.db';
-
+    (adapter as any).getDbPath = () => '/tmp/nonexistent-vt.db';
     const result = await adapter.readMessagesAsync('/any/path');
     expect(result).toHaveLength(0);
   });
 
-  it('should handle empty session (no messages)', async () => {
-    const workspaceDir = '/test/workspace';
-    createTestDb(workspaceDir, []);
-
-    const adapter = new OpenCodeAdapter();
-    (adapter as any).getDbPath = () => dbPath;
-
-    const result = await adapter.readMessagesAsync(workspaceDir);
+  it('returns empty for session with no messages', async () => {
+    createTestDb('/test/ws', []);
+    const result = await makeAdapter().readMessagesAsync('/test/ws');
     expect(result).toHaveLength(0);
   });
 
-  it('should use message IDs from the database', async () => {
-    const workspaceDir = '/test/workspace';
-    createTestDb(workspaceDir, [
-      { role: 'user', content: 'hello', time: 100 },
-    ]);
-
-    const adapter = new OpenCodeAdapter();
-    (adapter as any).getDbPath = () => dbPath;
-
-    const result = await adapter.readMessagesAsync(workspaceDir);
+  it('uses message IDs from the database', async () => {
+    createTestDb('/test/ws', [{ role: 'user', content: 'hello', time: 100 }]);
+    const result = await makeAdapter().readMessagesAsync('/test/ws');
     expect(result[0].id).toBe('msg_0');
   });
 
-  it('should have correct adapter name', () => {
-    const adapter = new OpenCodeAdapter();
-    expect(adapter.name).toBe('opencode');
+  it('getCurrentSessionId returns session ID for known directory', async () => {
+    createTestDb('/test/ws', [{ role: 'user', content: 'hi', time: 100 }]);
+    const id = await makeAdapter().getCurrentSessionId('/test/ws');
+    expect(id).toBe('ses_test1');
+  });
+
+  it('getCurrentSessionId returns null for unknown directory', async () => {
+    createTestDb('/test/ws', []);
+    const id = await makeAdapter().getCurrentSessionId('/some/other/dir');
+    expect(id).toBeNull();
+  });
+
+  it('reads messages by specific sessionId', async () => {
+    createTestDb('/test/ws', [
+      { role: 'user', content: 'pinned session msg', time: 1000 },
+    ]);
+    const result = await makeAdapter().readMessagesAsync('/test/ws', 'ses_test1');
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe('pinned session msg');
+  });
+
+  it('returns empty when given a non-existent sessionId', async () => {
+    createTestDb('/test/ws', [{ role: 'user', content: 'hi', time: 100 }]);
+    const result = await makeAdapter().readMessagesAsync('/test/ws', 'ses_nonexistent');
+    expect(result).toHaveLength(0);
+  });
+});
+
+// ─── ClaudeCodeAdapter ────────────────────────────────────────────────────
+
+describe('ClaudeCodeAdapter', () => {
+  let tmpDir: string;
+  let sessionFile: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vt-claude-'));
+    sessionFile = path.join(tmpDir, 'session.jsonl');
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  function makeAdapter(sessionDir: string) {
+    const adapter = new ClaudeCodeAdapter();
+    // Point the adapter at our temp directory
+    (adapter as any).getSessionDir = () => sessionDir;
+    return adapter;
+  }
+
+  function writeJsonl(lines: object[]) {
+    fsSync.writeFileSync(sessionFile, lines.map(l => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+  }
+
+  it('has correct adapter name', () => {
+    expect(new ClaudeCodeAdapter().name).toBe('claudecode');
+  });
+
+  it('reads user and assistant messages from JSONL', async () => {
+    writeJsonl([
+      { message: { role: 'user', content: [{ type: 'text', text: 'Write tests' }] }, timestamp: '2024-01-01T00:00:00Z' },
+      { message: { role: 'assistant', content: [{ type: 'text', text: 'Here are tests' }] }, timestamp: '2024-01-01T00:00:01Z' },
+    ]);
+
+    const adapter = makeAdapter(tmpDir);
+    const result = await adapter.readMessagesAsync('/any/path', sessionFile);
+    expect(result).toHaveLength(2);
+    expect(result[0].role).toBe('user');
+    expect(result[0].content).toBe('Write tests');
+    expect(result[1].role).toBe('assistant');
+    expect(result[1].content).toBe('Here are tests');
+  });
+
+  it('handles string content (not array)', async () => {
+    writeJsonl([
+      { message: { role: 'user', content: 'plain string message' }, timestamp: '2024-01-01T00:00:00Z' },
+    ]);
+    const adapter = makeAdapter(tmpDir);
+    const result = await adapter.readMessagesAsync('/any/path', sessionFile);
+    expect(result[0].content).toBe('plain string message');
+  });
+
+  it('maps "human" role to "user"', async () => {
+    writeJsonl([
+      { message: { role: 'human', content: [{ type: 'text', text: 'hello' }] }, timestamp: '2024-01-01T00:00:00Z' },
+    ]);
+    const adapter = makeAdapter(tmpDir);
+    const result = await adapter.readMessagesAsync('/any/path', sessionFile);
+    expect(result[0].role).toBe('user');
+  });
+
+  it('skips lines without text content', async () => {
+    writeJsonl([
+      { message: { role: 'assistant', content: [{ type: 'tool_use', id: 'x' }] }, timestamp: '2024-01-01T00:00:00Z' },
+      { message: { role: 'user', content: [{ type: 'text', text: 'real message' }] }, timestamp: '2024-01-01T00:00:01Z' },
+    ]);
+    const adapter = makeAdapter(tmpDir);
+    const result = await adapter.readMessagesAsync('/any/path', sessionFile);
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe('real message');
+  });
+
+  it('skips malformed JSON lines gracefully', async () => {
+    fsSync.writeFileSync(sessionFile,
+      '{"message":{"role":"user","content":[{"type":"text","text":"ok"}]},"timestamp":"2024-01-01T00:00:00Z"}\n' +
+      'NOT VALID JSON\n' +
+      '{"message":{"role":"assistant","content":[{"type":"text","text":"also ok"}]},"timestamp":"2024-01-01T00:00:01Z"}\n',
+      'utf8'
+    );
+    const adapter = makeAdapter(tmpDir);
+    const result = await adapter.readMessagesAsync('/any/path', sessionFile);
+    expect(result).toHaveLength(2);
+  });
+
+  it('returns empty for non-existent file', async () => {
+    const adapter = makeAdapter(tmpDir);
+    const result = await adapter.readMessagesAsync('/any/path', '/tmp/no-such-file.jsonl');
+    expect(result).toHaveLength(0);
+  });
+});
+
+// ─── ensureProjectInstructions ────────────────────────────────────────────
+
+describe('ensureProjectInstructions', () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'vt-instr-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('writes AGENTS.md for OpenCode', async () => {
+    ensureProjectInstructions(tmpDir);
+    const content = await fs.readFile(path.join(tmpDir, 'AGENTS.md'), 'utf8');
+    expect(content).toContain(VARIANTREE_MARKER);
+    expect(content).toContain('When to checkpoint');
+  });
+
+  it('writes CLAUDE.md for Claude Code', async () => {
+    ensureProjectInstructions(tmpDir);
+    const content = await fs.readFile(path.join(tmpDir, 'CLAUDE.md'), 'utf8');
+    expect(content).toContain(VARIANTREE_MARKER);
+    expect(content).toContain('When to checkpoint');
+  });
+
+  it('both files contain the same instruction body', async () => {
+    ensureProjectInstructions(tmpDir);
+    const agents = await fs.readFile(path.join(tmpDir, 'AGENTS.md'), 'utf8');
+    const claude = await fs.readFile(path.join(tmpDir, 'CLAUDE.md'), 'utf8');
+    // Strip the heading line (# AGENTS vs # CLAUDE) — the rest should match
+    const stripHeading = (s: string) => s.replace(/^# \w+\n\n/, '');
+    expect(stripHeading(agents)).toBe(stripHeading(claude));
+  });
+
+  it('is idempotent — does not duplicate instructions on repeated calls', async () => {
+    ensureProjectInstructions(tmpDir);
+    ensureProjectInstructions(tmpDir);
+    const agents = await fs.readFile(path.join(tmpDir, 'AGENTS.md'), 'utf8');
+    const markerCount = (agents.match(new RegExp(VARIANTREE_MARKER, 'g')) ?? []).length;
+    expect(markerCount).toBe(2); // one opening, one closing
+  });
+
+  it('appends to existing files that have no Variantree section', async () => {
+    await fs.writeFile(path.join(tmpDir, 'AGENTS.md'), '# My Project\n\nCustom rules here.\n', 'utf8');
+    ensureProjectInstructions(tmpDir);
+    const content = await fs.readFile(path.join(tmpDir, 'AGENTS.md'), 'utf8');
+    expect(content).toContain('Custom rules here.');
+    expect(content).toContain(VARIANTREE_MARKER);
   });
 });
 
@@ -276,15 +402,14 @@ describe('NodeStorage', () => {
     storage = new NodeStorage(tmpDir);
   });
 
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
   it('should save and load a workspace', async () => {
     const workspace = {
-      id: 'ws-1',
-      title: 'Test',
-      branches: {},
-      checkpoints: {},
-      activeBranchId: 'b1',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      id: 'ws-1', title: 'Test', branches: {}, checkpoints: {},
+      activeBranchId: 'b1', createdAt: Date.now(), updatedAt: Date.now(),
     };
     await storage.save('ws-1', workspace as any);
     const loaded = await storage.load('ws-1');

@@ -1,8 +1,44 @@
-# Variantree
+<p align="center">
+  <img src="assets/logo.svg" width="80" alt="Variantree logo" />
+</p>
 
-**AI-native version control — checkpoints, branches, and conversation context, all managed by your AI.**
+<h1 align="center">Variantree</h1>
+
+<p align="center">
+  <strong>AI-native version control — checkpoints, branches, and conversation context, all managed by your AI.</strong>
+</p>
+
+<p align="center">
+  <a href="#installation">Install</a> · <a href="#example-session">Demo</a> · <a href="#why-variantree">Why?</a> · <a href="#packages">Packages</a>
+</p>
+
+---
 
 Variantree gives AI coding assistants (OpenCode, Claude Code, etc.) the ability to snapshot your code, branch into parallel explorations, and restore prior states — while keeping the full conversation context intact across every switch. It works via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), so your AI uses it automatically without you having to manage it manually.
+
+---
+
+## Why Variantree
+
+### Save tokens, not money
+
+Every time you ask an AI to "go back" or "try the other approach," it has to re-read your entire codebase and re-establish context from scratch. That's thousands of wasted tokens per switch. Variantree stores the full conversation history per branch — when you switch, the AI picks up exactly where it left off with zero redundant context. Over a session with multiple explorations, this adds up to **significant token savings**.
+
+### Automatic agent checkpointing
+
+You don't have to remember to save. Variantree's standing instructions tell the AI to checkpoint after completing tasks, before risky changes, and before branching. The AI does it proactively — your code and conversation are always recoverable without you lifting a finger.
+
+### Fearless exploration
+
+Want to try a class-based rewrite? A different algorithm? A complete architectural pivot? Branch off, explore freely, and switch back in one sentence. Every branch preserves its own code state and conversation, so you never lose work and the AI never loses context.
+
+### Full conversation continuity
+
+Other tools restore files. Variantree restores *understanding*. When you switch branches, the AI gets the complete conversation ancestry for that branch — every decision, every rationale, every prior instruction. It doesn't just see the code; it knows *why* the code looks the way it does.
+
+### Zero friction
+
+Install once, and it works. No manual init, no config files to write, no commands to memorize. The MCP server registers itself globally, project instructions are written on the first tool call, and the AI handles checkpointing and branching through natural conversation.
 
 ---
 
@@ -122,6 +158,18 @@ variantree init            # manually set up a project (usually not needed)
 - **Conversation messages** are read from OpenCode's SQLite database and synced into Variantree's workspace on every tool call.
 - **Session tracking** pins each Variantree workspace to a specific OpenCode session ID, so messages from old sessions at the same path are never re-imported.
 - **Branches** store only their delta messages; the full context is reconstructed by walking the parent checkpoint chain.
+
+---
+
+## References
+
+Variantree is inspired by research on context branching for LLM conversations:
+
+> **Context Branching for LLM Conversations: A Version Control Approach to Exploratory Programming**
+> Chickmagalur Nanjundappa & Maaheshwari, 2025
+> [arXiv:2512.13914](https://arxiv.org/abs/2512.13914)
+>
+> *"Branched conversations achieved higher response quality compared to linear conversations, with large improvements in focus and context awareness. Branching reduced context size by 58.1%, eliminating irrelevant exploratory content."*
 
 ---
 

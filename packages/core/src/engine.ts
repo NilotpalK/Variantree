@@ -429,14 +429,33 @@ export class VariantTree {
   }
 
   /**
-   * Persist the OpenCode session ID that this workspace is tracking.
-   * Called by syncConversation to enable session-aware message filtering.
+   * Get the pinned session ID for a given adapter.
+   * Falls back to the legacy openCodeSessionId field for backward compatibility.
    */
-  async setOpenCodeSessionId(sessionId: string): Promise<void> {
+  getSessionId(adapterName: string): string | undefined {
     const ws = this.requireWorkspace();
-    ws.openCodeSessionId = sessionId;
+    return ws.sessionIds?.[adapterName]
+      ?? (adapterName === 'opencode' ? ws.openCodeSessionId : undefined);
+  }
+
+  /**
+   * Persist the session ID for a given adapter.
+   * Also keeps the legacy openCodeSessionId field in sync for 'opencode'.
+   */
+  async setSessionId(adapterName: string, sessionId: string): Promise<void> {
+    const ws = this.requireWorkspace();
+    if (!ws.sessionIds) ws.sessionIds = {};
+    ws.sessionIds[adapterName] = sessionId;
+    if (adapterName === 'opencode') ws.openCodeSessionId = sessionId;
     ws.updatedAt = now();
     await this.save();
+  }
+
+  /**
+   * @deprecated Use setSessionId('opencode', sessionId) instead.
+   */
+  async setOpenCodeSessionId(sessionId: string): Promise<void> {
+    return this.setSessionId('opencode', sessionId);
   }
 
   /**
