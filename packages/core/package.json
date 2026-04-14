@@ -1,6 +1,6 @@
 {
   "name": "@variantree/core",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "Core engine for Variantree — conversation branching and checkpoint management",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

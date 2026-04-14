@@ -4,14 +4,14 @@
  * AI tool global configs (OpenCode, Claude Code).
  *
  * Runs automatically after `npm install -g @variantree/watcher`.
- * Each registration is idempotent — skips if already configured.
+ * Always updates the config to ensure the latest MCP args are set.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
 
-const MCP_COMMAND_NPXARGS = ['-y', '@variantree/mcp'];
+const MCP_ARGS = ['-y', '@variantree/mcp@latest'];
 const MCP_ENV = { VARIANTREE_DIR: '.' };
 
 // ─── OpenCode ────────────────────────────────────────────────────────────────
@@ -25,11 +25,10 @@ function registerOpenCode() {
   try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
 
   if (!config.mcp) config.mcp = {};
-  if (config.mcp.variantree) return;
 
   config.mcp.variantree = {
     type: 'local',
-    command: ['npx', ...MCP_COMMAND_NPXARGS],
+    command: ['npx', ...MCP_ARGS],
     environment: MCP_ENV,
   };
 
@@ -47,11 +46,10 @@ function registerClaudeCode() {
   try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
 
   if (!config.mcpServers) config.mcpServers = {};
-  if (config.mcpServers.variantree) return;
 
   config.mcpServers.variantree = {
     command: 'npx',
-    args: MCP_COMMAND_NPXARGS,
+    args: MCP_ARGS,
     env: MCP_ENV,
   };
 
@@ -61,5 +59,5 @@ function registerClaudeCode() {
 
 // ─── Run ─────────────────────────────────────────────────────────────────────
 
-try { registerOpenCode(); } catch {}
-try { registerClaudeCode(); } catch {}
+try { registerOpenCode(); } catch (e) { console.warn('[variantree] OpenCode config skipped:', e.message); }
+try { registerClaudeCode(); } catch (e) { console.warn('[variantree] Claude Code config skipped:', e.message); }

@@ -56,7 +56,7 @@ Traditional version control is built for humans running commands. Variantree is 
 ## Installation
 
 ```bash
-npm install -g @variantree/watcher
+sudo npm install -g @variantree/watcher@latest
 ```
 
 That's it — one package for all supported tools. The installer automatically registers the Variantree MCP server in the global config for **both OpenCode and Claude Code**. Open any project and start chatting — Variantree activates on the first tool call.
@@ -65,6 +65,8 @@ That's it — one package for all supported tools. The installer automatically r
 |---|---|
 | [OpenCode](https://opencode.ai) | `~/.config/opencode/opencode.json` → `mcp.variantree` |
 | [Claude Code](https://claude.ai/code) | `~/.claude.json` → `mcpServers.variantree` |
+
+To update to a newer version, just run the same command again — it overwrites the old version and refreshes the MCP config.
 
 > **Requirements:** Node.js 18+
 
