@@ -1,6 +1,6 @@
 {
   "name": "@variantree/watcher",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Passive session file watcher and CLI for Variantree",
   "type": "module",
   "main": "dist/index.js",
@@ -9,7 +9,8 @@
     "variantree": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "scripts"
   ],
   "scripts": {
     "build": "tsc",
