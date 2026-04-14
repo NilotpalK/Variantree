@@ -450,7 +450,7 @@ server.registerTool(
     if (checkpoints.length > 0) {
       lines.push('Checkpoints:');
       for (const cp of checkpoints.slice(-8)) {
-        lines.push(`  • ${cp.label}${cp.snapshotRef ? ' 📸' : ''}`);
+        lines.push(`  ${cp.snapshotRef ? '◆' : '◇'} ${cp.label}`);
       }
     } else {
       lines.push('Checkpoints: none');
@@ -499,7 +499,7 @@ server.registerTool(
 
     function renderBranch(branch: BranchMeta, prefix: string, connector: string): string[] {
       const active = branch.isActive ? ' ●' : '';
-      const out = [`${prefix}${connector}${branch.name} (${branch.messageCount} msgs)${active}`];
+      const out = [`${prefix}${connector}⎇ ${branch.name} (${branch.messageCount} msgs)${active}`];
 
       const branchCps = cpsByBranch.get(branch.id) ?? [];
       const childIndent = prefix + (connector === '' ? '  ' : (connector.startsWith('└') ? '    ' : '│   '));
@@ -514,8 +514,8 @@ server.registerTool(
         const children = childBranchesOf.get(cp.id) ?? [];
         const isLastCp = i === branchCps.length - 1 && children.length === 0;
         const cpConnector = isLastCp ? '└── ' : '├── ';
-        const snap = cp.snapshotRef ? ' 📸' : '';
-        out.push(`${childIndent}${cpConnector}${cp.label}${snap}`);
+        const cpIcon = cp.snapshotRef ? '◆' : '◇';
+        out.push(`${childIndent}${cpConnector}${cpIcon} ${cp.label}`);
 
         const continuation = isLastCp ? '    ' : '│   ';
         for (let j = 0; j < children.length; j++) {

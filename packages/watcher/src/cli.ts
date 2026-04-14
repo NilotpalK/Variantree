@@ -101,8 +101,9 @@ function printBranchNode(
   const connector = indent === '' ? '' : (isLast ? TREE_END : TREE_FORK) + ' ';
   const nameColor = branch.isActive ? accent : chalk.white;
   const activeTag = branch.isActive ? accent(' ●') : '';
+  const branchIcon = brand('⎇');
 
-  console.log(`  ${dim(indent)}${connector}${nameColor.bold(branch.name)} ${dim(`(${branch.messageCount} msgs)`)}${activeTag}`);
+  console.log(`  ${dim(indent)}${connector}${branchIcon} ${nameColor.bold(branch.name)} ${dim(`(${branch.messageCount} msgs)`)}${activeTag}`);
 
   const branchCps = allCheckpoints
     .filter(cp => cp.branchId === branch.id)
@@ -117,10 +118,10 @@ function printBranchNode(
     const childBranches = allBranches.filter(b => b.parentCheckpointId === cp.id);
     const cpIsLast = i === branchCps.length - 1 && childBranches.length === 0;
     const cpConnector = cpIsLast ? TREE_END : TREE_FORK;
-    const snap = cp.snapshotRef ? ` ${SNAP}` : '';
+    const cpIcon = cp.snapshotRef ? warn('◆') : dim('◇');
     const time = dim(formatTime(cp.createdAt));
 
-    console.log(`  ${dim(childIndent)}${cpConnector} ${warn(cp.label)}${snap}  ${time}`);
+    console.log(`  ${dim(childIndent)}${cpConnector} ${cpIcon} ${warn(cp.label)}  ${time}`);
 
     const continuation = cpIsLast ? '    ' : '│   ';
     for (let j = 0; j < childBranches.length; j++) {
