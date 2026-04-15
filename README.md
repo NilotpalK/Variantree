@@ -14,7 +14,7 @@
 
 ---
 
-AI coding tools give you a linear undo history. Variantree gives you a **tree**. Each branch keeps its own code snapshot *and* conversation ancestry — when you switch, the AI picks up exactly where it left off. No re-reading files, no re-explaining decisions. This cuts context size by **58.1%** and eliminates the quality degradation that comes with bloated conversation windows ([arXiv:2512.13914](https://arxiv.org/abs/2512.13914)).
+AI coding tools give you a linear undo history. Variantree gives you a **tree**. Each branch keeps its own code snapshot *and* conversation ancestry — when you switch, the AI picks up exactly where it left off. No re-reading files, no re-explaining decisions. This cuts context size by **58.1%** and eliminates the quality degradation that comes with bloated conversation windows [[1]](#ref-1).
 
 Works via [MCP](https://modelcontextprotocol.io) — your AI uses it automatically. Supports Claude Code and OpenCode.
 
@@ -22,9 +22,9 @@ Works via [MCP](https://modelcontextprotocol.io) — your AI uses it automatical
 
 ## The problem
 
-Every exploratory tangent you take stays in your AI's context forever. That's not just expensive — it makes the AI worse. Models lose **30%+ accuracy** when key information is buried mid-context ([Lost in the Middle, 2023](https://arxiv.org/abs/2307.03172)), degrade **up to 85%** as input grows ([arXiv:2510.05381](https://arxiv.org/html/2510.05381v1)), and agentic runs vary by **10×** in cost for the same task ([SWE-bench study](https://openreview.net/forum?id=1bUeVB3fov)).
+Every exploratory tangent you take stays in your AI's context forever. That's not just expensive — it makes the AI worse. Models lose **30%+ accuracy** when key information is buried mid-context [[3]](#ref-3), degrade **up to 85%** as input grows [[4]](#ref-4), and agentic runs vary by **10×** in cost for the same task [[7]](#ref-7).
 
-Branching isolates each exploration into its own context. The result: **58.1% less context**, **39% less quality degradation** ([arXiv:2512.13914](https://arxiv.org/abs/2512.13914)).
+Branching isolates each exploration into its own context. The result: **58.1% less context**, **39% less quality degradation** [[1]](#ref-1).
 
 ---
 
@@ -242,19 +242,19 @@ variantree init            # manually set up a project (usually not needed)
 Variantree is grounded in a growing body of research on long-context degradation, agentic coding cost, and conversation branching:
 
 **Context branching and tree architectures**
-- Chickmagalur Nanjundappa & Maaheshwari (2025). *Context Branching for LLM Conversations: A Version Control Approach to Exploratory Programming.* [arXiv:2512.13914](https://arxiv.org/abs/2512.13914) — 58.1% context reduction, 39% multi-turn quality drop.
-- *Conversation Tree Architecture: A Structured Framework for Context-Aware Multi-Branch LLM Conversations.* [arXiv:2603.21278](https://arxiv.org/html/2603.21278) — independent validation of tree-structured conversations with branch/merge semantics.
+1. <a id="ref-1"></a>Chickmagalur Nanjundappa & Maaheshwari (2025). *Context Branching for LLM Conversations: A Version Control Approach to Exploratory Programming.* [arXiv:2512.13914](https://arxiv.org/abs/2512.13914) — 58.1% context reduction, 39% multi-turn quality drop.
+2. <a id="ref-2"></a>*Conversation Tree Architecture: A Structured Framework for Context-Aware Multi-Branch LLM Conversations.* [arXiv:2603.21278](https://arxiv.org/html/2603.21278) — independent validation of tree-structured conversations with branch/merge semantics.
 
 **Long-context degradation**
-- Liu et al. (Stanford, 2023). *Lost in the Middle: How Language Models Use Long Contexts.* [arXiv:2307.03172](https://arxiv.org/abs/2307.03172) — U-shaped performance curve; 30%+ drop when info is mid-context.
-- *Context Length Alone Hurts LLM Performance Despite Perfect Retrieval* (2025). [arXiv:2510.05381](https://arxiv.org/html/2510.05381v1) — 13.9%–85% degradation within claimed context windows.
-- *LLMs Get Lost In Multi-Turn Conversation.* [arXiv:2505.06120](https://arxiv.org/pdf/2505.06120) — explicit multi-turn quality degradation.
-- [Context Rot — Chroma Research](https://research.trychroma.com/context-rot) — reliability decays non-uniformly as input grows.
+3. <a id="ref-3"></a>Liu et al. (Stanford, 2023). *Lost in the Middle: How Language Models Use Long Contexts.* [arXiv:2307.03172](https://arxiv.org/abs/2307.03172) — U-shaped performance curve; 30%+ drop when info is mid-context.
+4. <a id="ref-4"></a>*Context Length Alone Hurts LLM Performance Despite Perfect Retrieval* (2025). [arXiv:2510.05381](https://arxiv.org/html/2510.05381v1) — 13.9%–85% degradation within claimed context windows.
+5. <a id="ref-5"></a>*LLMs Get Lost In Multi-Turn Conversation.* [arXiv:2505.06120](https://arxiv.org/pdf/2505.06120) — explicit multi-turn quality degradation.
+6. <a id="ref-6"></a>[Context Rot — Chroma Research](https://research.trychroma.com/context-rot) — reliability decays non-uniformly as input grows.
 
 **Agentic coding token economics**
-- *How Do Coding Agents Spend Your Money? Analyzing and Predicting Token Consumptions in Agentic Coding Tasks.* [OpenReview](https://openreview.net/forum?id=1bUeVB3fov) — 10× run-to-run variance, input tokens dominate cost.
-- *Tokenomics: Quantifying Where Tokens Are Used in Agentic Software Engineering.* [arXiv:2601.14470](https://arxiv.org/pdf/2601.14470) — stage-by-stage token profiles.
-- [Efficient Context Management — JetBrains Research (Dec 2025)](https://blog.jetbrains.com/research/2025/12/efficient-context-management/) — observation masking vs. summarization as the two main paths.
+7. <a id="ref-7"></a>*How Do Coding Agents Spend Your Money? Analyzing and Predicting Token Consumptions in Agentic Coding Tasks.* [OpenReview](https://openreview.net/forum?id=1bUeVB3fov) — 10× run-to-run variance, input tokens dominate cost.
+8. <a id="ref-8"></a>*Tokenomics: Quantifying Where Tokens Are Used in Agentic Software Engineering.* [arXiv:2601.14470](https://arxiv.org/pdf/2601.14470) — stage-by-stage token profiles.
+9. <a id="ref-9"></a>[Efficient Context Management — JetBrains Research (Dec 2025)](https://blog.jetbrains.com/research/2025/12/efficient-context-management/) — observation masking vs. summarization as the two main paths.
 
 ---
 
