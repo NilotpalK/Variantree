@@ -5,16 +5,41 @@
 <h1 align="center">Variantree</h1>
 
 <p align="center">
-  <strong>AI-native version control — checkpoints, branches, and conversation context, all managed by your AI.</strong>
+  <strong>The first AI-native version control. Branch, checkpoint, and switch — your AI handles the rest.</strong>
 </p>
 
 <p align="center">
-  <a href="#installation">Install</a> · <a href="#example-session">Demo</a> · <a href="#why-variantree">Why?</a> · <a href="#packages">Packages</a>
+  <a href="#installation">Install</a> · <a href="#example-session">Demo</a> · <a href="#why-variantree">Why?</a> · <a href="#how-variantree-is-different">vs. alternatives</a> · <a href="#packages">Packages</a>
 </p>
 
 ---
 
-Variantree gives AI coding assistants (OpenCode, Claude Code, etc.) the ability to snapshot your code, branch into parallel explorations, and restore prior states — while keeping the full conversation context intact across every switch. It works via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), so your AI uses it automatically without you having to manage it manually.
+AI coding tools give you a linear undo history. Variantree gives you a **tree**. Each branch keeps its own code snapshot *and* conversation ancestry — when you switch, the AI picks up exactly where it left off. No re-reading files, no re-explaining decisions. This cuts context size by **58.1%** and eliminates the quality degradation that comes with bloated conversation windows ([arXiv:2512.13914](https://arxiv.org/abs/2512.13914)).
+
+Works via [MCP](https://modelcontextprotocol.io) — your AI uses it automatically. Supports Claude Code and OpenCode.
+
+---
+
+## The problem
+
+Every exploratory tangent you take stays in your AI's context forever. That's not just expensive — it makes the AI worse. Models lose **30%+ accuracy** when key information is buried mid-context ([Lost in the Middle, 2023](https://arxiv.org/abs/2307.03172)), degrade **up to 85%** as input grows ([arXiv:2510.05381](https://arxiv.org/html/2510.05381v1)), and agentic runs vary by **10×** in cost for the same task ([SWE-bench study](https://openreview.net/forum?id=1bUeVB3fov)).
+
+Branching isolates each exploration into its own context. The result: **58.1% less context**, **39% less quality degradation** ([arXiv:2512.13914](https://arxiv.org/abs/2512.13914)).
+
+---
+
+## How Variantree is different
+
+|  | Variantree | Claude Code `/rewind` | Cursor checkpoints | `git worktree` |
+|---|---|---|---|---|
+| Named, AI-authored checkpoints | ✅ | ❌ (anonymous) | ❌ (anonymous) | ❌ (commits) |
+| Branching tree, not linear undo | ✅ | ❌ | ❌ | ✅ |
+| Conversation ancestry on switch | ✅ | ❌ | ❌ | ❌ |
+| Captures external edits (bash, editors) | ✅ (full git snapshot) | ❌ (tool edits only) | ❌ (tool edits only) | ✅ |
+| Doesn't pollute `git log` | ✅ (hidden refs) | n/a | n/a | ❌ |
+| Cross-tool (Claude Code + OpenCode) | ✅ | ❌ | ❌ | n/a |
+
+If you've used `/rewind` and wished it had *names*, *branches*, and *conversation memory* — that's Variantree.
 
 ---
 
@@ -100,10 +125,15 @@ AI:   ✓ Switched to branch "main".
 
 You:  Show me the tree
 
-AI:   main (4 msgs)
-        └── todo-basic 📸
-              └── class-based (2 msgs) ●
-                    └── class-v1 📸
+AI:   ⎇ main (4 msgs)
+        └── ◆ todo-basic
+              └── ⎇ class-based (2 msgs) ●
+                    └── ◆ class-v1
+
+You:  Show me the tree visually
+
+AI:   [opens interactive React Flow tree in browser at http://127.0.0.1:PORT]
+      Opened interactive tree visualization.
 ```
 
 ---
@@ -145,6 +175,14 @@ main (12 msgs) ●
               └── endpoints-done ◆
 ```
 
+#### `tree_web` — Interactive visual tree in the browser
+
+Opens the full React Flow web UI in your default browser, pre-loaded with your project's real workspace data. Drag, zoom, and explore all branches and checkpoints interactively.
+
+<p align="center">
+  <img src="assets/tree-web-screenshot.png" alt="Variantree interactive tree visualization" width="800" />
+</p>
+
 #### `log` — Full conversation replay
 
 Retrieve the complete conversation history for any branch. Useful when the AI needs to recall a specific decision or re-read prior context without it being in the active context window.
@@ -163,13 +201,14 @@ Branches are linked: if `class-based` was created from `todo-basic` on `main`, t
 
 ## Packages
 
-This is a monorepo with three packages:
+This is a monorepo with four packages:
 
 | Package | Install? | Description |
 |---|---|---|
 | [`@variantree/core`](packages/core) | No | Core engine — workspace, branch, checkpoint, and context logic |
 | [`@variantree/watcher`](packages/watcher) | **`npm i -g`** | CLI + adapters for OpenCode \& Claude Code. Auto-registers MCP on install. |
-| [`@variantree/mcp`](packages/mcp) | No | MCP server binary — invoked automatically by AI tools, not by users directly |
+| [`@variantree/mcp`](packages/mcp) | No | MCP server binary — invoked automatically by AI tools. Bundles the web UI. |
+| [`@variantree/web`](packages/web) | No | React + React Flow web UI — served locally by `tree_web` / `tree --web`. |
 
 ### CLI
 
@@ -181,7 +220,8 @@ variantree checkpoint      # save a checkpoint interactively
 variantree branch <name>   # create a new branch
 variantree switch <name>   # switch to an existing branch
 variantree restore <label> # restore code to a checkpoint
-variantree tree            # show the branch/checkpoint tree
+variantree tree            # show the branch/checkpoint tree (ASCII)
+variantree tree --web      # open interactive tree visualization in browser
 variantree log             # show conversation history
 variantree init            # manually set up a project (usually not needed)
 ```
@@ -199,13 +239,22 @@ variantree init            # manually set up a project (usually not needed)
 
 ## References
 
-Variantree is inspired by research on context branching for LLM conversations:
+Variantree is grounded in a growing body of research on long-context degradation, agentic coding cost, and conversation branching:
 
-> **Context Branching for LLM Conversations: A Version Control Approach to Exploratory Programming**
-> Chickmagalur Nanjundappa & Maaheshwari, 2025
-> [arXiv:2512.13914](https://arxiv.org/abs/2512.13914)
->
-> *"Branched conversations achieved higher response quality compared to linear conversations, with large improvements in focus and context awareness. Branching reduced context size by 58.1%, eliminating irrelevant exploratory content."*
+**Context branching and tree architectures**
+- Chickmagalur Nanjundappa & Maaheshwari (2025). *Context Branching for LLM Conversations: A Version Control Approach to Exploratory Programming.* [arXiv:2512.13914](https://arxiv.org/abs/2512.13914) — 58.1% context reduction, 39% multi-turn quality drop.
+- *Conversation Tree Architecture: A Structured Framework for Context-Aware Multi-Branch LLM Conversations.* [arXiv:2603.21278](https://arxiv.org/html/2603.21278) — independent validation of tree-structured conversations with branch/merge semantics.
+
+**Long-context degradation**
+- Liu et al. (Stanford, 2023). *Lost in the Middle: How Language Models Use Long Contexts.* [arXiv:2307.03172](https://arxiv.org/abs/2307.03172) — U-shaped performance curve; 30%+ drop when info is mid-context.
+- *Context Length Alone Hurts LLM Performance Despite Perfect Retrieval* (2025). [arXiv:2510.05381](https://arxiv.org/html/2510.05381v1) — 13.9%–85% degradation within claimed context windows.
+- *LLMs Get Lost In Multi-Turn Conversation.* [arXiv:2505.06120](https://arxiv.org/pdf/2505.06120) — explicit multi-turn quality degradation.
+- [Context Rot — Chroma Research](https://research.trychroma.com/context-rot) — reliability decays non-uniformly as input grows.
+
+**Agentic coding token economics**
+- *How Do Coding Agents Spend Your Money? Analyzing and Predicting Token Consumptions in Agentic Coding Tasks.* [OpenReview](https://openreview.net/forum?id=1bUeVB3fov) — 10× run-to-run variance, input tokens dominate cost.
+- *Tokenomics: Quantifying Where Tokens Are Used in Agentic Software Engineering.* [arXiv:2601.14470](https://arxiv.org/pdf/2601.14470) — stage-by-stage token profiles.
+- [Efficient Context Management — JetBrains Research (Dec 2025)](https://blog.jetbrains.com/research/2025/12/efficient-context-management/) — observation masking vs. summarization as the two main paths.
 
 ---
 

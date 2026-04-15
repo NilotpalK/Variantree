@@ -65,7 +65,11 @@ summarise or omit details. Specifically:
 | restore     | Restore code to a specific checkpoint         |
 | status      | Show active branch, checkpoints               |
 | tree        | ASCII tree of branches and checkpoints        |
-| log         | Show conversation history for a branch        |`;
+| tree_web    | Open interactive visual tree in the browser   |
+| log         | Show conversation history for a branch        |
+
+When the user asks to "show the tree visually", "open the web UI", or
+"visualize the tree", use \`tree_web\` (not \`tree\`).`;
 
 /** The full fenced section, ready to embed in any markdown file. */
 export const VARIANTREE_INSTRUCTIONS_SECTION =

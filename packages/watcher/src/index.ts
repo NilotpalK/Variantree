@@ -17,6 +17,10 @@ export { GitSnapshotProvider } from './node/git-snapshot.js';
 export { launchOpenCodeSession } from './node/session-launcher.js';
 export type { LaunchResult } from './node/session-launcher.js';
 
+// Web UI server
+export { openWebUi } from './node/web-ui.js';
+export type { WebUiServer } from './node/web-ui.js';
+
 // Tool integrations
 export {
   ALL_TOOLS,

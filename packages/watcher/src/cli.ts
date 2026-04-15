@@ -16,6 +16,7 @@ import { NodeStorage } from './node/storage.js';
 import { GitSnapshotProvider } from './node/git-snapshot.js';
 import { VariantreeWatcher } from './watcher.js';
 import { launchOpenCodeSession } from './node/session-launcher.js';
+import { openWebUi } from './node/web-ui.js';
 import { ensureProjectInstructions, VARIANTREE_MARKER, ALL_TOOLS } from './tools/index.js';
 import { syncConversation } from './sync.js';
 
@@ -521,6 +522,7 @@ program
   .command('tree')
   .description('Visualise the branch tree')
   .option('-d, --dir <path>', 'workspace directory', process.cwd())
+  .option('--web', 'open interactive tree in the default browser')
   .action(async (opts) => {
     const cwd = path.resolve(opts.dir);
     const { engine } = createEngine(cwd);
@@ -529,6 +531,23 @@ program
       header('tree');
       hint('No workspace found.');
       divider();
+      return;
+    }
+
+    if (opts.web) {
+      header('tree --web');
+      try {
+        const { url } = await openWebUi(ws);
+        success('Opened interactive tree in browser');
+        detail('url', url);
+        hint('Press Ctrl+C to stop the server.');
+        divider();
+        // Keep the process alive so the HTTP server stays up
+        await new Promise(() => {});
+      } catch (err: any) {
+        errorMsg(`Failed to open web UI: ${err.message}`);
+        divider();
+      }
       return;
     }
 

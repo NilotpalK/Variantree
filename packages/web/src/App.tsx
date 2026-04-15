@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useEngine } from './hooks/useEngine';
+import { useEngine, isInjectedMode } from './hooks/useEngine';
 import TreeSidebar from './components/TreeSidebar';
 import ChatPanel from './components/ChatPanel';
 import ChatInput from './components/ChatInput';
@@ -9,7 +9,8 @@ import Modal from './components/Modal';
 export default function App() {
   const engine = useEngine();
   const [isLoading, setIsLoading] = useState(false);
-  const [showTreeView, setShowTreeView] = useState(false);
+  // In injected (read-only) mode, start with tree view and keep it visible
+  const [showTreeView, setShowTreeView] = useState(isInjectedMode);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [scrollTarget, setScrollTarget] = useState<number | null>(null);
 
@@ -189,12 +190,14 @@ export default function App() {
             activeBranch={engine.activeBranch}
             scrollToMessageIndex={scrollTarget}
           />
-          <ChatInput
-            onSendMessage={handleSendMessage}
-            onCreateCheckpoint={handleCreateCheckpoint}
-            onCreateBranch={handleCreateBranch}
-            disabled={isLoading}
-          />
+          {!isInjectedMode && (
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              onCreateCheckpoint={handleCreateCheckpoint}
+              onCreateBranch={handleCreateBranch}
+              disabled={isLoading}
+            />
+          )}
         </div>
       )}
 

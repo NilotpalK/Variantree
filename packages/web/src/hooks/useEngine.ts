@@ -7,6 +7,10 @@ import {
   Message,
 } from '@variantree/core';
 import { dexieStorage } from '../storage/DexieStorage';
+import { injectedStorage } from '../storage/InjectedStorage';
+
+/** When opened from MCP/CLI, workspace data is injected — the UI is read-only. */
+export const isInjectedMode = new URLSearchParams(window.location.search).get('source') === 'injected';
 
 export interface EngineState {
   workspace: Workspace | null;
@@ -32,7 +36,7 @@ export interface EngineActions {
  */
 export function useEngine(): EngineState & EngineActions {
   const engineRef = useRef<VariantTree>(
-    new VariantTree({ storage: dexieStorage })
+    new VariantTree({ storage: isInjectedMode ? injectedStorage : dexieStorage })
   );
 
   const [state, setState] = useState<EngineState>({
@@ -62,10 +66,18 @@ export function useEngine(): EngineState & EngineActions {
     }
   }, []);
 
-  // On mount: restore last workspace from IndexedDB, or create a fresh one
+  // On mount: restore workspace from storage (injected file data or IndexedDB)
   useEffect(() => {
     (async () => {
       const engine = engineRef.current;
+
+      if (isInjectedMode) {
+        // Load the single injected workspace (read-only view from MCP/CLI)
+        await engine.loadWorkspace('injected');
+        syncState();
+        return;
+      }
+
       const lastId = await dexieStorage.getLastWorkspaceId();
       if (lastId) {
         try {
@@ -82,11 +94,13 @@ export function useEngine(): EngineState & EngineActions {
   }, [syncState]);
 
   const createWorkspace = useCallback(async (title: string) => {
+    if (isInjectedMode) return;
     await engineRef.current.createWorkspace(title);
     syncState();
   }, [syncState]);
 
   const sendMessage = useCallback(async (content: string) => {
+    if (isInjectedMode) return;
     await engineRef.current.addMessage('user', content);
     // Simulate AI response
     await engineRef.current.addMessage(
@@ -97,21 +111,25 @@ export function useEngine(): EngineState & EngineActions {
   }, [syncState]);
 
   const createCheckpoint = useCallback(async (label: string) => {
+    if (isInjectedMode) return;
     await engineRef.current.createCheckpoint(label);
     syncState();
   }, [syncState]);
 
   const branchAction = useCallback(async (name: string, checkpointId?: string) => {
+    if (isInjectedMode) return;
     await engineRef.current.branch(name, checkpointId);
     syncState();
   }, [syncState]);
 
   const switchBranch = useCallback(async (branchId: string) => {
+    if (isInjectedMode) return;
     await engineRef.current.switchBranch(branchId);
     syncState();
   }, [syncState]);
 
   const deleteBranch = useCallback(async (branchId: string) => {
+    if (isInjectedMode) return;
     await engineRef.current.deleteBranch(branchId);
     syncState();
   }, [syncState]);

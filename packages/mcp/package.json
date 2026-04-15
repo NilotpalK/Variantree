@@ -1,6 +1,6 @@
 {
   "name": "@variantree/mcp",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "MCP server for Variantree — exposes checkpoint/branch/restore as AI-callable tools",
   "type": "module",
   "main": "dist/server.js",
@@ -12,7 +12,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build:web": "cd ../web && npm run build && mkdir -p ../mcp/dist/web-ui && cp -r dist/. ../mcp/dist/web-ui/",
+    "build": "npm run build:web && tsc",
     "dev": "tsc --watch",
     "start": "node dist/server.js",
     "test": "vitest run",
@@ -32,7 +33,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@variantree/core": "^0.1.0",
-    "@variantree/watcher": "^0.1.4",
+    "@variantree/watcher": "^0.2.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {

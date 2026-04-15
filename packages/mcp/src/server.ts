@@ -19,6 +19,7 @@ import {
   GitSnapshotProvider,
   ensureProjectInstructions,
   syncConversation,
+  openWebUi,
 } from '@variantree/watcher';
 
 // ─── Shared Helpers ───────────────────────────────────────────────────────
@@ -544,6 +545,42 @@ server.registerTool(
 
     const lines = renderBranch(root, '', '');
     return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+  }
+);
+
+// ── tree_web ───────────────────────────────────────────────────────────────
+
+server.registerTool(
+  'tree_web',
+  {
+    description:
+      'Open an interactive visual tree of all branches and checkpoints in the default browser. ' +
+      'Use this when the user asks to "show the tree visually", "open the web UI", or "visualize the tree".',
+  },
+  async () => {
+    const cwd = getCwd();
+    const { engine } = createEngine(cwd);
+    const ws = await engine.loadWorkspace(WORKSPACE_ID);
+    if (!ws) {
+      return { content: [{ type: 'text' as const, text: 'No Variantree workspace found. Create a checkpoint first.' }] };
+    }
+
+    try {
+      const { url } = await openWebUi(ws);
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Opened interactive tree visualization at ${url}\n\nThe browser shows all branches and checkpoints for this project. The view is read-only — use the MCP tools to create checkpoints or branches.`,
+        }],
+      };
+    } catch (err: any) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Failed to open web UI: ${err.message}\n\nMake sure the web UI has been built. Run \`npm run build\` in packages/web.`,
+        }],
+      };
+    }
   }
 );
 
