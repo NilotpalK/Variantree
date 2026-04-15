@@ -322,11 +322,11 @@ program
     header('checkpoint');
     const { engine } = await ensureWorkspace(cwd);
 
-    const synced = await syncConversation(engine, cwd);
+    const { newMessages: synced } = await syncConversation(engine, cwd);
     await engine.createCheckpoint(label, { workspacePath: cwd });
     success(`Checkpoint ${chalk.white.bold(`"${label}"`)} created`);
     if (synced > 0) {
-      detail('synced', `${synced} message(s) from OpenCode`);
+      detail('synced', `${synced} message(s)`);
     }
     detail('snapshot', `code saved ${SNAP}`);
     divider();

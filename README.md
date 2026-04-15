@@ -110,15 +110,44 @@ AI:   main (4 msgs)
 
 ## What the AI can do
 
-| Tool | What it does |
-|---|---|
-| `checkpoint` | Saves the current conversation + a full code snapshot |
-| `branch` | Creates a new branch from a checkpoint, restores that code state |
-| `switch` | Switches to an existing branch and restores its latest code state |
-| `restore` | Rewinds code files to a specific checkpoint (stays on current branch) |
-| `status` | Shows active branch, message count, and all checkpoints |
-| `tree` | ASCII diagram of all branches and checkpoints |
-| `log` | Full conversation history for a branch |
+> Unlike `/rewind` or `/checkpoint` in Claude Code (which are unnamed, auto-generated undo points on a linear timeline), every tool below is **AI-driven** — the AI decides when to use them, names things meaningfully, and manages a branching tree, not just a flat history.
+
+#### `checkpoint` — Named save points, not anonymous undo
+
+The AI creates checkpoints at meaningful moments — after finishing a feature, before a risky refactor, when you say "this looks good." Each checkpoint has a human-readable label (`"auth-complete"`, `"pre-migration"`) and captures a **full Git snapshot** of every tracked file, including changes from bash commands and external editors. Claude Code's built-in checkpoints only capture its own tool edits and have no names.
+
+#### `branch` — Parallel worlds, not linear history
+
+Create a new timeline from any checkpoint. The AI forks the conversation and restores the code to that exact state. Work on `graphql`, `rest-api`, and `grpc` branches simultaneously — each one isolated, each with its own conversation history. No other AI tool offers this.
+
+#### `switch` — Change timelines with full memory
+
+Jump between branches in one sentence. The AI doesn't just restore code — it loads the **complete conversation ancestry** for that branch. It remembers every decision, every rationale, every prior instruction from that timeline. Other tools restore files; Variantree restores *understanding*.
+
+#### `restore` — Rewind without losing your place
+
+Roll back code to any checkpoint while staying on the current branch. The conversation continues forward, but the code is exactly as it was at that save point. Think of it as "undo to here" without discarding your branch.
+
+#### `status` — Instant orientation
+
+Shows the active branch, message count, all branches, and all checkpoints at a glance — so the AI always knows where it is in the tree without scanning files or re-reading history.
+
+#### `tree` — See everything at once
+
+An ASCII visualization of your entire exploration tree — branches, checkpoints, active position, message counts. No other tool gives you a bird's-eye view of your AI session's decision history.
+
+```
+main (12 msgs) ●
+  └── auth-complete ◆
+        ├── try-graphql (6 msgs) ●
+        │     └── schema-done ◆
+        └── try-rest (4 msgs)
+              └── endpoints-done ◆
+```
+
+#### `log` — Full conversation replay
+
+Retrieve the complete conversation history for any branch. Useful when the AI needs to recall a specific decision or re-read prior context without it being in the active context window.
 
 The AI is instructed to use these proactively — after completing tasks, before risky changes, and whenever you ask to explore alternatives.
 

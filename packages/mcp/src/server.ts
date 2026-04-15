@@ -50,8 +50,18 @@ async function ensureWorkspace(cwd: string) {
     await storage.save(WORKSPACE_ID, ws);
     await engine.loadWorkspace(WORKSPACE_ID);
   }
-  ensureProjectInstructions(cwd);
   return { engine, storage, snapshotProvider };
+}
+
+/**
+ * Sync conversation, then write instructions only for the detected tool.
+ */
+async function syncAndEnsureInstructions(engine: VariantTree, cwd: string): Promise<number> {
+  const result = await syncConversation(engine, cwd);
+  if (result.adapterName) {
+    ensureProjectInstructions(cwd, result.adapterName);
+  }
+  return result.newMessages;
 }
 
 
@@ -136,7 +146,7 @@ server.registerTool(
   async ({ label }) => {
     const cwd = getCwd();
     const { engine, snapshotProvider } = await ensureWorkspace(cwd);
-    const synced = await syncConversation(engine, cwd);
+    const synced = await syncAndEnsureInstructions(engine, cwd);
     const cp = await engine.createCheckpoint(label, { workspacePath: cwd });
 
     const totalMessages = engine.getContext().length;
@@ -187,7 +197,7 @@ server.registerTool(
   async ({ name, checkpoint, force }) => {
     const cwd = getCwd();
     const { engine } = await ensureWorkspace(cwd);
-    await syncConversation(engine, cwd);
+    await syncAndEnsureInstructions(engine, cwd);
 
     // Guard: warn if there are messages not yet captured in a checkpoint
     if (!force) {
@@ -259,7 +269,7 @@ server.registerTool(
   async ({ name, force }) => {
     const cwd = getCwd();
     const { engine } = await ensureWorkspace(cwd);
-    await syncConversation(engine, cwd);
+    await syncAndEnsureInstructions(engine, cwd);
 
     const branches = engine.getBranches();
     const targetBranch = branches.find((b) => b.name === name);
@@ -326,7 +336,7 @@ server.registerTool(
   async ({ label, force }) => {
     const cwd = getCwd();
     const { engine } = await ensureWorkspace(cwd);
-    await syncConversation(engine, cwd);
+    await syncAndEnsureInstructions(engine, cwd);
 
     // Guard: warn if there are messages not yet captured in a checkpoint
     if (!force) {
@@ -435,7 +445,7 @@ server.registerTool(
       return { content: [{ type: 'text' as const, text: 'No Variantree workspace. Use variantree_checkpoint to create one.' }] };
     }
 
-    await syncConversation(engine, cwd);
+    await syncAndEnsureInstructions(engine, cwd);
     const branch = engine.getActiveBranch();
     const context = engine.getContext();
     const branches = engine.getBranches();

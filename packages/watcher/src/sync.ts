@@ -22,10 +22,15 @@ function getAdapters(): SessionAdapter[] {
   return ALL_TOOLS.flatMap(t => (t.adapter ? [t.adapter] : []));
 }
 
+export interface SyncResult {
+  newMessages: number;
+  adapterName: string | null;
+}
+
 export async function syncConversation(
   engine: VariantTree,
   cwd: string,
-): Promise<number> {
+): Promise<SyncResult> {
   const adapters = getAdapters();
 
   // If a session ID is already pinned for any adapter, only use that adapter.
@@ -65,8 +70,8 @@ export async function syncConversation(
       await engine.addMessage(msg.role, msg.content, { source: adapter.name });
     }
 
-    return newMessages.length;
+    return { newMessages: newMessages.length, adapterName: adapter.name };
   }
 
-  return 0;
+  return { newMessages: 0, adapterName: null };
 }

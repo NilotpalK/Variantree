@@ -33,6 +33,7 @@ export { ClaudeCodeAdapter } from './tools/claudecode/index.js';
 
 // Shared sync (adapter-agnostic — works with OpenCode, Claude Code, etc.)
 export { syncConversation } from './sync.js';
+export type { SyncResult } from './sync.js';
 
 // Backwards-compat re-export (old import path: adapters/opencode)
 export { VARIANTREE_MARKER, mergeInstructions } from './tools/index.js';

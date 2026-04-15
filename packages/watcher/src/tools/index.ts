@@ -19,11 +19,16 @@ import type { ToolIntegration } from './base.js';
 export const ALL_TOOLS: ToolIntegration[] = [opencodeTool, claudecodeTool];
 
 /**
- * Write standing instructions for all tools into the project directory.
- * Called on every MCP session start and `variantree init`.
+ * Write standing instructions into the project directory.
+ * If adapterName is provided, only writes for that tool.
+ * Otherwise writes for all tools (used by `variantree init`).
  */
-export function ensureProjectInstructions(projectDir: string): void {
-  for (const tool of ALL_TOOLS) {
+export function ensureProjectInstructions(projectDir: string, adapterName?: string): void {
+  const targets = adapterName
+    ? ALL_TOOLS.filter(t => t.name === adapterName)
+    : ALL_TOOLS;
+
+  for (const tool of targets) {
     try {
       tool.writeProjectInstructions(projectDir);
     } catch {
