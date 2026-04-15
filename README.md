@@ -260,4 +260,4 @@ Variantree is grounded in a growing body of research on long-context degradation
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE) — free for personal and open-source use.
+[Apache License 2.0](LICENSE)

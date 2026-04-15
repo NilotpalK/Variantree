@@ -1,6 +1,6 @@
 {
   "name": "@variantree/watcher",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Passive session file watcher and CLI for Variantree",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
     "opencode",
     "claude-code"
   ],
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "Apache-2.0",
   "publishConfig": {
     "access": "public"
   },
