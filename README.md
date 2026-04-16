@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <video src="assets/variantree.mov" autoplay loop muted playsinline width="800"></video>
+  <video src="assets/variantree.mp4" autoplay loop muted playsinline width="800"></video>
 </p>
 
 ---
