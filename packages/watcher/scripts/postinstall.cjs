@@ -12,7 +12,6 @@ const path = require('node:path');
 const os = require('node:os');
 
 const MCP_ARGS = ['-y', '@variantree/mcp@latest'];
-const MCP_ENV = { VARIANTREE_DIR: '.' };
 
 // ─── OpenCode ────────────────────────────────────────────────────────────────
 
@@ -29,7 +28,7 @@ function registerOpenCode() {
   config.mcp.variantree = {
     type: 'local',
     command: ['npx', ...MCP_ARGS],
-    environment: MCP_ENV,
+    environment: { VARIANTREE_CALLER: 'opencode' },
   };
 
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
@@ -50,7 +49,7 @@ function registerClaudeCode() {
   config.mcpServers.variantree = {
     command: 'npx',
     args: MCP_ARGS,
-    env: MCP_ENV,
+    env: { VARIANTREE_CALLER: 'claudecode' },
   };
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');

@@ -294,17 +294,11 @@ program
       hint('Could not auto-configure opencode.json. You may need to add the MCP server manually.');
     }
 
-    // Write or merge AGENTS.md with Variantree standing instructions
+    // Write standing instructions for all supported tools
     try {
-      const agentsPath = path.join(cwd, 'AGENTS.md');
-      const existing = (() => { try { return fsSync.readFileSync(agentsPath, 'utf8'); } catch { return null; } })();
-      const alreadyDone = existing?.includes(VARIANTREE_MARKER);
       ensureProjectInstructions(cwd);
-      if (alreadyDone) {
-        hint('Instruction files already up to date (AGENTS.md, CLAUDE.md)');
-      } else {
-        success('Created instruction files: AGENTS.md, CLAUDE.md');
-      }
+      success('Created instruction files for all tools (AGENTS.md, CLAUDE.md)');
+      hint('Only the relevant file will be updated on future MCP calls.');
     } catch {
       hint('Could not write instruction files.');
     }

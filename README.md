@@ -12,6 +12,10 @@
   <a href="#installation">Install</a> · <a href="#example-session">Demo</a> · <a href="#why-variantree">Why?</a> · <a href="#how-variantree-is-different">vs. alternatives</a> · <a href="#packages">Packages</a>
 </p>
 
+<p align="center">
+  <video src="assets/variantree.mov" autoplay loop muted playsinline width="800"></video>
+</p>
+
 ---
 
 AI coding tools give you a linear undo history. Variantree gives you a **tree**. Each branch keeps its own code snapshot *and* conversation ancestry — when you switch, the AI picks up exactly where it left off. No re-reading files, no re-explaining decisions. This cuts context size by **58.1%** and eliminates the quality degradation that comes with bloated conversation windows [[1]](#ref-1).

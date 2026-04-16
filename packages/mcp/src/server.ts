@@ -55,12 +55,29 @@ async function ensureWorkspace(cwd: string) {
 }
 
 /**
+ * Detect which AI tool is calling us.
+ * Priority: VARIANTREE_CALLER env var (set by postinstall) > project-dir heuristic.
+ */
+function detectCallerTool(cwd: string): string | null {
+  const caller = process.env.VARIANTREE_CALLER;
+  if (caller === 'claudecode' || caller === 'opencode') return caller;
+
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+  const claudeProjectDir = path.join(home, '.claude', 'projects', cwd.replace(/\//g, '-'));
+  if (fs.existsSync(claudeProjectDir)) return 'claudecode';
+  if (fs.existsSync(path.join(home, '.config', 'opencode', 'sessions'))) return 'opencode';
+
+  return null;
+}
+
+/**
  * Sync conversation, then write instructions only for the detected tool.
  */
 async function syncAndEnsureInstructions(engine: VariantTree, cwd: string): Promise<number> {
   const result = await syncConversation(engine, cwd);
-  if (result.adapterName) {
-    ensureProjectInstructions(cwd, result.adapterName);
+  const toolName = result.adapterName ?? detectCallerTool(cwd);
+  if (toolName) {
+    ensureProjectInstructions(cwd, toolName);
   }
   return result.newMessages;
 }
