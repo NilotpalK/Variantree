@@ -6,9 +6,11 @@
  * Strategy:
  *   1. If the workspace already has a pinned session ID for any adapter, use
  *      that adapter exclusively (prevents cross-adapter message confusion).
- *   2. If no adapter is pinned yet, try each adapter in ALL_TOOLS order and
- *      use the first one that discovers an active session for the workspace.
- *   3. Within the chosen adapter, apply the stale-session fallback: if the
+ *   2. If no adapter is pinned yet and the caller identified itself, try that
+ *      adapter first, then the rest.
+ *   3. Otherwise try each adapter in ALL_TOOLS order and use the first one
+ *      that discovers an active session for the workspace.
+ *   4. Within the chosen adapter, apply the stale-session fallback: if the
  *      pinned session returns no messages, re-discover the current session.
  */
 
@@ -30,13 +32,27 @@ export interface SyncResult {
 export async function syncConversation(
   engine: VariantTree,
   cwd: string,
+  preferredAdapter?: string | null,
 ): Promise<SyncResult> {
   const adapters = getAdapters();
 
   // If a session ID is already pinned for any adapter, only use that adapter.
   // This prevents mixing messages from OpenCode and Claude Code in the same branch.
   const pinnedAdapter = adapters.find(a => engine.getSessionId(a.name) != null);
-  const candidates = pinnedAdapter ? [pinnedAdapter] : adapters;
+
+  let candidates: SessionAdapter[];
+  if (pinnedAdapter) {
+    candidates = [pinnedAdapter];
+  } else if (preferredAdapter) {
+    // Put the caller's adapter first so it wins ties against other adapters
+    // that happen to have stale sessions for this cwd.
+    const preferred = adapters.find(a => a.name === preferredAdapter);
+    candidates = preferred
+      ? [preferred, ...adapters.filter(a => a !== preferred)]
+      : adapters;
+  } else {
+    candidates = adapters;
+  }
 
   for (const adapter of candidates) {
     let sessionId = engine.getSessionId(adapter.name);

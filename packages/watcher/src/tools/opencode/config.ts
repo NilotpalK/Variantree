@@ -12,7 +12,7 @@ import os from 'node:os';
 const MCP_ENTRY = {
   type: 'local',
   command: ['npx', '-y', '@variantree/mcp'],
-  environment: { VARIANTREE_DIR: '.' },
+  environment: { VARIANTREE_CALLER: 'opencode' },
 };
 
 function getConfigPath(): string {

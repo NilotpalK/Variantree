@@ -72,10 +72,16 @@ function detectCallerTool(cwd: string): string | null {
 
 /**
  * Sync conversation, then write instructions only for the detected tool.
+ *
+ * The host that spawned us (VARIANTREE_CALLER / project-dir heuristic) is the
+ * source of truth for which instructions file to write. The sync adapter only
+ * tells us where messages happen to live — a user who once ran OpenCode in
+ * this cwd would otherwise get AGENTS.md written inside a Claude Code session.
  */
 async function syncAndEnsureInstructions(engine: VariantTree, cwd: string): Promise<number> {
-  const result = await syncConversation(engine, cwd);
-  const toolName = result.adapterName ?? detectCallerTool(cwd);
+  const callerTool = detectCallerTool(cwd);
+  const result = await syncConversation(engine, cwd, callerTool);
+  const toolName = callerTool ?? result.adapterName;
   if (toolName) {
     ensureProjectInstructions(cwd, toolName);
   }

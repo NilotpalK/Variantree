@@ -1,6 +1,6 @@
 {
   "name": "@variantree/mcp",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "MCP server for Variantree — exposes checkpoint/branch/restore as AI-callable tools",
   "type": "module",
   "main": "dist/server.js",
@@ -33,7 +33,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@variantree/core": "^0.1.0",
-    "@variantree/watcher": "^0.2.0",
+    "@variantree/watcher": "^0.2.2",
     "zod": "^3.24.4"
   },
   "devDependencies": {
