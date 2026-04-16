@@ -12,9 +12,7 @@
   <a href="#installation">Install</a> · <a href="#example-session">Demo</a> · <a href="#why-variantree">Why?</a> · <a href="#how-variantree-is-different">vs. alternatives</a> · <a href="#packages">Packages</a>
 </p>
 
-<p align="center">
-  <video src="https://github.com/user-attachments/assets/21b8021b-87c5-4bc9-ba58-9c2e2cd0fa0a" autoplay loop muted playsinline width="800"></video>
-</p>
+https://github.com/user-attachments/assets/21b8021b-87c5-4bc9-ba58-9c2e2cd0fa0a
 
 ---
 
