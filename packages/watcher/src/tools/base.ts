@@ -48,13 +48,6 @@ export interface ToolIntegration {
   readonly adapter?: SessionAdapter;
 
   /**
-   * Register the Variantree MCP server in this tool's global config file.
-   * Called once by the postinstall script.
-   * Should be idempotent — safe to call multiple times.
-   */
-  registerGlobalMcp?(): void;
-
-  /**
    * Write or update the standing instructions file for this tool in the
    * given project directory (e.g. AGENTS.md, CLAUDE.md, .cursor/rules/).
    * Should be idempotent — safe to call on every session start.

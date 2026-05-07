@@ -25,7 +25,6 @@ export type { WebUiServer } from './node/web-ui.js';
 export {
   ALL_TOOLS,
   ensureProjectInstructions,
-  registerAllMcp,
 } from './tools/index.js';
 export type { ToolIntegration, SessionAdapter } from './tools/index.js';
 

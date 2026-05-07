@@ -80,7 +80,7 @@ export class ClaudeCodeAdapter implements SessionAdapter {
         try {
           const entry = JSON.parse(trimmed);
 
-          // JSONL format: { type, message: { role, content }, timestamp }
+          // JSONL format: { type, message: { role, content, model }, timestamp, usage: {...} }
           const role: string = entry.message?.role ?? entry.type;
           const content = extractContent(entry.message?.content ?? entry.content);
           if (!content) continue;
@@ -89,11 +89,33 @@ export class ClaudeCodeAdapter implements SessionAdapter {
             ? new Date(entry.timestamp).getTime()
             : Date.now();
 
+          // Extract exact token usage from Claude Code's JSONL (assistant messages only)
+          const usage = entry.usage;
+          const model: string | undefined = entry.message?.model;
+
+          const tokenUsage = usage
+            ? {
+                inputTokens: (usage.input_tokens ?? 0) as number,
+                outputTokens: (usage.output_tokens ?? 0) as number,
+                cacheCreationTokens: usage.cache_creation_input_tokens as number | undefined,
+                cacheReadTokens: usage.cache_read_input_tokens as number | undefined,
+                model: model && model !== '<synthetic>' ? model : undefined,
+                method: 'exact' as const,
+              }
+            : {
+                // Fallback: estimate ~4 chars per token
+                inputTokens: role === 'human' || role === 'user' ? Math.ceil(content.length / 4) : 0,
+                outputTokens: role === 'assistant' ? Math.ceil(content.length / 4) : 0,
+                model: model && model !== '<synthetic>' ? model : undefined,
+                method: 'estimated' as const,
+              };
+
           messages.push({
             id: `cc-${messages.length}-${ts}`,
             role: role === 'human' || role === 'user' ? 'user' : 'assistant',
             content,
             timestamp: ts,
+            tokenUsage,
           });
         } catch { /* skip malformed lines */ }
       }

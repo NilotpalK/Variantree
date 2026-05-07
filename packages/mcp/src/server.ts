@@ -90,7 +90,7 @@ async function syncAndEnsureInstructions(engine: VariantTree, cwd: string): Prom
 
 
 
-function generateContextFile(cwd: string, branchName: string, messages: Array<{ role: string; content: string }>) {
+function generateContextFile(cwd: string, branchName: string, summary: string | undefined) {
   const contextDir = path.join(cwd, '.variantree');
   if (!fs.existsSync(contextDir)) fs.mkdirSync(contextDir, { recursive: true });
 
@@ -104,14 +104,12 @@ function generateContextFile(cwd: string, branchName: string, messages: Array<{ 
     ``,
     `---`,
     ``,
-    `## Conversation History`,
-    ``,
   ];
 
-  for (const msg of messages) {
-    const prefix = msg.role === 'user' ? '**User:**' : '**Assistant:**';
-    const content = msg.content.length > 500 ? msg.content.slice(0, 500) + '...' : msg.content;
-    lines.push(`${prefix} ${content}`, '');
+  if (summary) {
+    lines.push(`## Summary`, ``, summary, ``);
+  } else {
+    lines.push(`No checkpoint summary available. Use the \`log\` tool for full history.`);
   }
 
   fs.writeFileSync(path.join(contextDir, 'branch-context.md'), lines.join('\n'), 'utf8');
@@ -131,25 +129,24 @@ function countUnsavedMessages(engine: VariantTree): number {
   return Math.max(0, branch.messages.length - 1 - lastCp.messageIndex);
 }
 
-function generateContextSummary(branchName: string, messages: Array<{ role: string; content: string }>): string {
+/**
+ * Build the lightweight context block injected on switch/restore/branch.
+ * Uses the checkpoint summary (tiny, ~100 tokens) instead of full message history.
+ * Points the AI to the `log` tool for deeper context.
+ */
+function generateContextBlock(branchName: string, summary: string | undefined): string {
   const lines = [
-    `--- Branch Context (prior conversation on "${branchName}") ---`,
-    `Branch: ${branchName}`,
-    `Generated: ${new Date().toISOString()}`,
-    '',
+    `--- Branch Context ("${branchName}") ---`,
   ];
 
-  if (messages.length === 0) {
-    lines.push('No messages recorded at this checkpoint.');
+  if (summary) {
+    lines.push(`Summary: ${summary}`);
   } else {
-    for (const msg of messages) {
-      const prefix = msg.role === 'user' ? 'User:' : 'Assistant:';
-      const content = msg.content.length > 500 ? msg.content.slice(0, 500) + '...' : msg.content;
-      lines.push(`${prefix} ${content}`, '');
-    }
+    lines.push(`No checkpoint summary available for this branch.`);
   }
 
-  lines.push('--- End Branch Context ---');
+  lines.push(`Tip: Use the \`log\` tool to see the full conversation history if you need more detail on past decisions.`);
+  lines.push(`--- End Branch Context ---`);
   return lines.join('\n');
 }
 
@@ -164,18 +161,29 @@ const server = new McpServer({
 server.registerTool(
   'checkpoint',
   {
-    description: 'Create a Variantree checkpoint: syncs the current conversation and takes a code snapshot. Always relay the full output to the user including messages synced count, snapshot diff (files added/modified/deleted), and total file count.',
-    inputSchema: { label: z.string().describe('A short label for this checkpoint, e.g. "auth-working"') },
+    description: 'Create a Variantree checkpoint: syncs the current conversation and takes a code snapshot. ' +
+      'You MUST provide a summary of the work done so far — this is injected as context when switching branches. ' +
+      'Always relay the full output to the user including messages synced count, snapshot diff, and total file count.',
+    inputSchema: {
+      label: z.string().describe('A short label for this checkpoint, e.g. "auth-working"'),
+      summary: z.string().describe(
+        'A concise summary (2-4 sentences) of the work done up to this point. ' +
+        'Include key decisions, what was built, and any important context. ' +
+        'This summary is injected when switching branches so the AI understands the prior work. ' +
+        'Example: "Implemented JWT auth with bcrypt hashing. Login returns access+refresh tokens. Middleware validates on all /api routes."'
+      ),
+    },
   },
-  async ({ label }) => {
+  async ({ label, summary }) => {
     const cwd = getCwd();
     const { engine, snapshotProvider } = await ensureWorkspace(cwd);
     const synced = await syncAndEnsureInstructions(engine, cwd);
-    const cp = await engine.createCheckpoint(label, { workspacePath: cwd });
+    const cp = await engine.createCheckpoint(label, { workspacePath: cwd, summary });
 
     const totalMessages = engine.getContext().length;
     const lines = [`✓ Checkpoint "${label}" created.`];
     lines.push(`  Messages synced: ${synced} new  (${totalMessages} total in context)`);
+    lines.push(`  Summary saved: "${summary}"`);
 
     if (cp.snapshotRef) {
       const allCheckpoints = engine.getCheckpoints();
@@ -202,6 +210,8 @@ server.registerTool(
         lines.push(`  Snapshot: ${fileCount} files`);
       }
     }
+    lines.push('');
+    lines.push('💡 Run /compact now to compress conversation context before switching branches.');
     return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
   }
 );
@@ -266,15 +276,21 @@ server.registerTool(
       }
     }
 
-    const context = engine.getContext();
-    generateContextFile(cwd, name, context);
-    lines.push(`  Context file written: .variantree/branch-context.md`);
-    lines.push(`  Branch context from the prior conversation is included below. No session restart is needed.`);
+    // Find the most recent checkpoint on the source branch for its summary
+    const allCps = engine.getCheckpoints();
+    const sourceCp = cpId
+      ? allCps.find(c => c.id === cpId)
+      : allCps.filter(c => c.branchId !== branch.id).sort((a, b) => b.createdAt - a.createdAt)[0];
+    const summary = sourceCp?.summary;
 
-    const contextSummary = generateContextSummary(name, context);
+    generateContextFile(cwd, name, summary);
+    lines.push(`  Context updated: .variantree/branch-context.md`);
+    lines.push(`  No session restart is needed.`);
+
+    const contextBlock = generateContextBlock(name, summary);
     return { content: [
       { type: 'text' as const, text: lines.join('\n') },
-      { type: 'text' as const, text: contextSummary },
+      { type: 'text' as const, text: contextBlock },
     ] };
   }
 );
@@ -333,15 +349,16 @@ server.registerTool(
        lines.push(`  (No checkpoints found on this branch to restore state.)`);
     }
 
-    const context = engine.getContext();
-    generateContextFile(cwd, name, context);
+    // Use the latest checkpoint's summary for lightweight context injection
+    const summary = latestCp?.summary;
+    generateContextFile(cwd, name, summary);
     lines.push(`  Context updated: .variantree/branch-context.md`);
-    lines.push(`  Branch context from the prior conversation is included below. No session restart is needed.`);
+    lines.push(`  No session restart is needed.`);
 
-    const contextSummary = generateContextSummary(name, context);
+    const contextBlock = generateContextBlock(name, summary);
     return { content: [
       { type: 'text' as const, text: lines.join('\n') },
-      { type: 'text' as const, text: contextSummary },
+      { type: 'text' as const, text: contextBlock },
     ] };
   }
 );
@@ -390,15 +407,16 @@ server.registerTool(
     }
 
     const branchName = engine.getActiveBranch().name;
-    const context = engine.getContext();
-    generateContextFile(cwd, branchName, context);
+    // Use the restored checkpoint's summary for lightweight context injection
+    const cpSummary = cp.summary;
+    generateContextFile(cwd, branchName, cpSummary);
     lines.push(`  Context updated: .variantree/branch-context.md`);
-    lines.push(`  Branch context from the prior conversation is included below. No session restart is needed.`);
+    lines.push(`  No session restart is needed.`);
 
-    const contextSummary = generateContextSummary(branchName, context);
+    const contextBlock = generateContextBlock(branchName, cpSummary);
     return { content: [
       { type: 'text' as const, text: lines.join('\n') },
-      { type: 'text' as const, text: contextSummary },
+      { type: 'text' as const, text: contextBlock },
     ] };
   }
 );
@@ -604,6 +622,221 @@ server.registerTool(
         }],
       };
     }
+  }
+);
+
+// ── stats ──────────────────────────────────────────────────────────────────
+
+/** Per-million-token pricing (USD). */
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'claude-opus-4-7': { input: 15, output: 75 },
+  'claude-opus-4-6': { input: 15, output: 75 },
+  'claude-sonnet-4-7': { input: 3, output: 15 },
+  'claude-sonnet-4-5': { input: 3, output: 15 },
+  'claude-haiku-3-5': { input: 0.25, output: 1.25 },
+};
+
+/** Estimate tokens from content length (~4 chars per token). */
+function estimateTokens(content: string): number {
+  return Math.ceil(content.length / 4);
+}
+
+server.registerTool(
+  'stats',
+  {
+    description:
+      'Show per-branch and session-level token analytics. Includes token usage, cost estimates, ' +
+      'and tokens saved by branching (compared to a hypothetical linear conversation). ' +
+      'Always relay the FULL output to the user.',
+  },
+  async () => {
+    const cwd = getCwd();
+    const { engine, snapshotProvider } = await ensureWorkspace(cwd);
+    await syncAndEnsureInstructions(engine, cwd);
+
+    const branches = engine.getBranches();
+    const checkpoints = engine.getCheckpoints();
+    const activeBranch = engine.getActiveBranch();
+
+    // ── Per-branch stats ──────────────────────────────────────────────
+    interface BranchStats {
+      name: string;
+      isActive: boolean;
+      messageCount: number;
+      userMessages: number;
+      assistantMessages: number;
+      duration: { startTime: string; endTime: string; durationMinutes: number } | null;
+      tokens: {
+        inputTokens: number;
+        outputTokens: number;
+        cacheCreationTokens: number;
+        cacheReadTokens: number;
+        totalTokens: number;
+        method: 'exact' | 'estimated' | 'mixed';
+      };
+      models: string[];
+      checkpointCount: number;
+    }
+
+    let sessionTotalInput = 0;
+    let sessionTotalOutput = 0;
+    let sessionTotalMessages = 0;
+    const sessionModels = new Set<string>();
+    let sessionMethod: 'exact' | 'estimated' | 'mixed' = 'exact';
+
+    // Collect all message tokens across every branch for linear calculation
+    let linearTotalTokens = 0;
+
+    const branchStatsList: BranchStats[] = [];
+
+    for (const branch of branches) {
+      const msgs = branch.messages;
+      const userMsgs = msgs.filter(m => m.role === 'user');
+      const assistantMsgs = msgs.filter(m => m.role === 'assistant');
+
+      let branchInput = 0;
+      let branchOutput = 0;
+      let branchCacheCreation = 0;
+      let branchCacheRead = 0;
+      let hasExact = false;
+      let hasEstimated = false;
+      const branchModels = new Set<string>();
+
+      for (const msg of msgs) {
+        if (msg.tokenUsage) {
+          branchInput += msg.tokenUsage.inputTokens;
+          branchOutput += msg.tokenUsage.outputTokens;
+          branchCacheCreation += msg.tokenUsage.cacheCreationTokens ?? 0;
+          branchCacheRead += msg.tokenUsage.cacheReadTokens ?? 0;
+          if (msg.tokenUsage.model) {
+            branchModels.add(msg.tokenUsage.model);
+            sessionModels.add(msg.tokenUsage.model);
+          }
+          if (msg.tokenUsage.method === 'exact') hasExact = true;
+          else hasEstimated = true;
+        } else {
+          // No tokenUsage at all — estimate from content
+          const est = estimateTokens(msg.content);
+          if (msg.role === 'user') branchInput += est;
+          else branchOutput += est;
+          hasEstimated = true;
+        }
+      }
+
+      const branchTotal = branchInput + branchOutput;
+      linearTotalTokens += branchTotal;
+      sessionTotalInput += branchInput;
+      sessionTotalOutput += branchOutput;
+      sessionTotalMessages += msgs.length;
+
+      const branchMethod: 'exact' | 'estimated' | 'mixed' =
+        hasExact && hasEstimated ? 'mixed' : hasExact ? 'exact' : 'estimated';
+      if (branchMethod !== 'exact') sessionMethod = sessionMethod === 'exact' ? branchMethod : 'mixed';
+
+      // Duration
+      let duration: BranchStats['duration'] = null;
+      if (msgs.length > 0) {
+        const first = msgs[0].timestamp;
+        const last = msgs[msgs.length - 1].timestamp;
+        duration = {
+          startTime: new Date(first).toISOString(),
+          endTime: new Date(last).toISOString(),
+          durationMinutes: Math.round((last - first) / 60000),
+        };
+      }
+
+      const branchCps = checkpoints.filter(cp => cp.branchId === branch.id);
+
+      branchStatsList.push({
+        name: branch.name,
+        isActive: branch.isActive,
+        messageCount: msgs.length,
+        userMessages: userMsgs.length,
+        assistantMessages: assistantMsgs.length,
+        duration,
+        tokens: {
+          inputTokens: branchInput,
+          outputTokens: branchOutput,
+          cacheCreationTokens: branchCacheCreation,
+          cacheReadTokens: branchCacheRead,
+          totalTokens: branchTotal,
+          method: branchMethod,
+        },
+        models: Array.from(branchModels),
+        checkpointCount: branchCps.length,
+      });
+    }
+
+    // ── Token savings ─────────────────────────────────────────────────
+    // Walk the active branch's ancestry to compute branched context size
+    const ancestryIds = engine.getAncestry();
+    let branchedTotalTokens = 0;
+    for (const branchId of ancestryIds) {
+      const b = branches.find(br => br.id === branchId);
+      if (!b) continue;
+      for (const msg of b.messages) {
+        if (msg.tokenUsage) {
+          branchedTotalTokens += msg.tokenUsage.inputTokens + msg.tokenUsage.outputTokens;
+        } else {
+          branchedTotalTokens += estimateTokens(msg.content);
+        }
+      }
+    }
+
+    const tokensSaved = Math.max(0, linearTotalTokens - branchedTotalTokens);
+    const percentReduction = linearTotalTokens > 0
+      ? ((tokensSaved / linearTotalTokens) * 100).toFixed(1)
+      : '0.0';
+
+    // Cost estimation
+    const primaryModel = sessionModels.size > 0 ? Array.from(sessionModels)[0] : null;
+    const pricing = primaryModel ? MODEL_PRICING[primaryModel] ?? null : null;
+    let estimatedCostSaved = 'N/A';
+    if (pricing) {
+      const inputSaved = tokensSaved * 0.5; // rough 50/50 split
+      const outputSaved = tokensSaved * 0.5;
+      const cost = (inputSaved / 1_000_000) * pricing.input + (outputSaved / 1_000_000) * pricing.output;
+      estimatedCostSaved = `$${cost.toFixed(4)}`;
+    }
+
+    // ── Format output ─────────────────────────────────────────────────
+    const lines: string[] = [];
+    lines.push('📊 Variantree Session Stats', '');
+
+    // Per-branch
+    lines.push('── Per-Branch ──────────────────────────────────');
+    for (const bs of branchStatsList) {
+      const active = bs.isActive ? ' ● (active)' : '';
+      lines.push(`  ⎇ ${bs.name}${active}`);
+      lines.push(`    Messages: ${bs.messageCount} (${bs.userMessages} user, ${bs.assistantMessages} assistant)`);
+      lines.push(`    Tokens: ${bs.tokens.totalTokens.toLocaleString()} (in: ${bs.tokens.inputTokens.toLocaleString()}, out: ${bs.tokens.outputTokens.toLocaleString()}) [${bs.tokens.method}]`);
+      if (bs.tokens.cacheCreationTokens > 0 || bs.tokens.cacheReadTokens > 0) {
+        lines.push(`    Cache: ${bs.tokens.cacheReadTokens.toLocaleString()} read, ${bs.tokens.cacheCreationTokens.toLocaleString()} created`);
+      }
+      if (bs.models.length > 0) lines.push(`    Model: ${bs.models.join(', ')}`);
+      if (bs.duration) lines.push(`    Duration: ${bs.duration.durationMinutes} min`);
+      lines.push(`    Checkpoints: ${bs.checkpointCount}`);
+      lines.push('');
+    }
+
+    // Session totals
+    lines.push('── Session Totals ──────────────────────────────');
+    lines.push(`  Branches: ${branches.length}`);
+    lines.push(`  Checkpoints: ${checkpoints.length}`);
+    lines.push(`  Messages: ${sessionTotalMessages}`);
+    lines.push(`  Tokens: ${(sessionTotalInput + sessionTotalOutput).toLocaleString()} (in: ${sessionTotalInput.toLocaleString()}, out: ${sessionTotalOutput.toLocaleString()}) [${sessionMethod}]`);
+    if (sessionModels.size > 0) lines.push(`  Models: ${Array.from(sessionModels).join(', ')}`);
+    lines.push('');
+
+    // Token savings
+    lines.push('── Token Savings (branching vs linear) ─────────');
+    lines.push(`  Linear context (all branches): ${linearTotalTokens.toLocaleString()} tokens`);
+    lines.push(`  Branched context (active path): ${branchedTotalTokens.toLocaleString()} tokens`);
+    lines.push(`  Tokens saved: ${tokensSaved.toLocaleString()} (${percentReduction}% reduction)`);
+    lines.push(`  Estimated cost saved: ${estimatedCostSaved}`);
+    lines.push(`  Method: ${sessionMethod}`);
+
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
   }
 );
 

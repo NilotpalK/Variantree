@@ -8,8 +8,8 @@
 export type { ToolIntegration, SessionAdapter } from './base.js';
 export { VARIANTREE_MARKER, VARIANTREE_INSTRUCTIONS_SECTION, mergeInstructions } from './instructions.js';
 
-export { opencodeTool, OpenCodeAdapter, mergeAgentsMd } from './opencode/index.js';
-export { claudecodeTool, ClaudeCodeAdapter } from './claudecode/index.js';
+export { OpenCodeAdapter, mergeAgentsMd } from './opencode/index.js';
+export { ClaudeCodeAdapter } from './claudecode/index.js';
 
 import { opencodeTool } from './opencode/index.js';
 import { claudecodeTool } from './claudecode/index.js';
@@ -37,16 +37,3 @@ export function ensureProjectInstructions(projectDir: string, adapterName?: stri
   }
 }
 
-/**
- * Register MCP server in all tools' global configs.
- * Called once by the postinstall script.
- */
-export function registerAllMcp(): void {
-  for (const tool of ALL_TOOLS) {
-    try {
-      tool.registerGlobalMcp?.();
-    } catch {
-      // Postinstall must never fail
-    }
-  }
-}

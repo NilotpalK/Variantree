@@ -21,7 +21,7 @@ export type {
 } from './types';
 
 // Storage backends
-export { MemoryStorage, FileStorage } from './storage';
+export { MemoryStorage } from './storage';
 
 // Utilities (exposed for advanced usage)
 export { resolveContext, getBranchAncestry } from './context';

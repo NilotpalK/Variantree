@@ -96,23 +96,6 @@ export class VariantTree {
     return workspace;
   }
 
-  /**
-   * List all workspace IDs in storage.
-   */
-  async listWorkspaces(): Promise<string[]> {
-    return this.storage.list();
-  }
-
-  /**
-   * Delete a workspace from storage.
-   */
-  async deleteWorkspace(id: string): Promise<void> {
-    await this.storage.delete(id);
-    if (this.workspace?.id === id) {
-      this.workspace = null;
-    }
-  }
-
   // ─── Messages ────────────────────────────────────────────────────────────
 
   /**
@@ -171,6 +154,8 @@ export class VariantTree {
     options?: {
       metadata?: Record<string, unknown>;
       workspacePath?: string;
+      /** AI-generated summary of work done up to this checkpoint. */
+      summary?: string;
     }
   ): Promise<Checkpoint> {
     const ws = this.requireWorkspace();
@@ -197,6 +182,7 @@ export class VariantTree {
       messageIndex,
       createdAt: now(),
       ...(options?.metadata && { metadata: options.metadata }),
+      ...(options?.summary && { summary: options.summary }),
     };
 
     if (options?.workspacePath && this.snapshotProvider) {

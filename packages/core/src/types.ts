@@ -19,6 +19,21 @@ export interface Message {
   timestamp: number;
   /** Extensible metadata (e.g., injected_from, model, tokens) */
   metadata?: Record<string, unknown>;
+  /** Token usage data parsed from the AI tool's native storage */
+  tokenUsage?: {
+    /** New (non-cached) input tokens for this turn */
+    inputTokens: number;
+    /** Output tokens generated */
+    outputTokens: number;
+    /** Tokens written to cache this turn */
+    cacheCreationTokens?: number;
+    /** Tokens read from cache this turn */
+    cacheReadTokens?: number;
+    /** Model identifier (e.g. "claude-opus-4-7") */
+    model?: string;
+    /** Whether these counts are exact (from source) or estimated (~4 chars/token) */
+    method: 'exact' | 'estimated';
+  };
 }
 
 // ─── Branches ────────────────────────────────────────────────────────────────
@@ -71,6 +86,12 @@ export interface Checkpoint {
   createdAt: number;
   /** Extensible metadata (e.g., future code snapshot references) */
   metadata?: Record<string, unknown>;
+  /**
+   * AI-generated summary of the work done up to this checkpoint.
+   * Injected as lightweight context when switching branches (instead of full
+   * message history). The `log` tool can be used for full detail on demand.
+   */
+  summary?: string;
   /**
    * Opaque ref to a code snapshot (e.g., a git commit SHA).
    * Managed by a SnapshotProvider implementation.

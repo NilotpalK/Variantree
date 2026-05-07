@@ -23,6 +23,10 @@ code snapshots. Use them **proactively** — don't wait for the user to ask.
 - When the user says "done", "looks good", "ship it", or "let's move on".
 - Before any branch, switch, or restore — the tools will warn you if you
   forget, but it's better to checkpoint proactively.
+- **Always include a summary** — 2-4 sentences covering what was built,
+  key decisions, and important context. This summary is injected when
+  switching branches so you (or another session) can understand prior work
+  without reading the full conversation.
 
 ### When to branch
 - When the user wants to explore an alternative approach ("let's try X
@@ -32,6 +36,8 @@ code snapshots. Use them **proactively** — don't wait for the user to ask.
 ### When to switch / restore
 - When the user wants to go back to a previous line of work or a known-good
   state ("go back to main", "restore the working version").
+- After switching, you receive a **summary** of the prior work on that branch.
+  If you need more detail on past decisions, use the \`log\` tool.
 
 ### Handling unsaved-message warnings
 If a tool returns an unsaved-message warning (e.g. "4 messages will be lost"):
@@ -59,14 +65,15 @@ summarise or omit details. Specifically:
 ### Tool reference
 | Tool        | Purpose                                      |
 |-------------|----------------------------------------------|
-| checkpoint  | Sync conversation + snapshot code             |
+| checkpoint  | Sync conversation + snapshot code + summary   |
 | branch      | Create a new branch from a checkpoint         |
 | switch      | Switch to an existing branch                  |
 | restore     | Restore code to a specific checkpoint         |
 | status      | Show active branch, checkpoints               |
 | tree        | ASCII tree of branches and checkpoints        |
 | tree_web    | Open interactive visual tree in the browser   |
-| log         | Show conversation history for a branch        |
+| log         | Full conversation history (deep context)      |
+| stats       | Token usage and branching analytics           |
 
 When the user asks to "show the tree visually", "open the web UI", or
 "visualize the tree", use \`tree_web\` (not \`tree\`).`;
