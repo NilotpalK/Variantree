@@ -40,6 +40,7 @@ Branching isolates each exploration into its own context. The result: **58.1% le
 | Captures external edits (bash, editors) | ✅ (full git snapshot) | ❌ (tool edits only) | ❌ (tool edits only) | ✅ |
 | Doesn't pollute `git log` | ✅ (hidden refs) | n/a | n/a | ❌ |
 | Cross-tool (Claude Code + OpenCode) | ✅ | ❌ | ❌ | n/a |
+| Per-branch token analytics | ✅ | ❌ | ❌ | ❌ |
 
 If you've used `/rewind` and wished it had *names*, *branches*, and *conversation memory* — that's Variantree.
 
@@ -111,7 +112,10 @@ You:  Save a checkpoint
 
 AI:   ✓ Checkpoint "todo-basic" created.
         Messages synced: 4 new  (4 total in context)
+        Summary saved: "Built a todo app with add(), remove(), list() functions."
         Snapshot: 1 file
+
+        💡 Run /compact now to compress conversation context before switching branches.
 
 You:  Branch off and rewrite it using a class, call it class-based
 
@@ -144,9 +148,9 @@ AI:   [opens interactive React Flow tree in browser at http://127.0.0.1:PORT]
 
 > Unlike `/rewind` or `/checkpoint` in Claude Code (which are unnamed, auto-generated undo points on a linear timeline), every tool below is **AI-driven** — the AI decides when to use them, names things meaningfully, and manages a branching tree, not just a flat history.
 
-#### `checkpoint` — Named save points, not anonymous undo
+#### `checkpoint` — Named save points with context summaries
 
-The AI creates checkpoints at meaningful moments — after finishing a feature, before a risky refactor, when you say "this looks good." Each checkpoint has a human-readable label (`"auth-complete"`, `"pre-migration"`) and captures a **full Git snapshot** of every tracked file, including changes from bash commands and external editors. Claude Code's built-in checkpoints only capture its own tool edits and have no names.
+The AI creates checkpoints at meaningful moments — after finishing a feature, before a risky refactor, when you say "this looks good." Each checkpoint has a human-readable label (`"auth-complete"`, `"pre-migration"`), a **2-4 sentence summary** of the work done, and a **full Git snapshot** of every tracked file, including changes from bash commands and external editors. The summary is injected as lightweight context (~100 tokens) when switching branches — no re-reading the full conversation. Claude Code's built-in checkpoints only capture its own tool edits, have no names, and no summaries.
 
 #### `branch` — Parallel worlds, not linear history
 
@@ -154,7 +158,7 @@ Create a new timeline from any checkpoint. The AI forks the conversation and res
 
 #### `switch` — Change timelines with full memory
 
-Jump between branches in one sentence. The AI doesn't just restore code — it loads the **complete conversation ancestry** for that branch. It remembers every decision, every rationale, every prior instruction from that timeline. Other tools restore files; Variantree restores *understanding*.
+Jump between branches in one sentence. The AI doesn't just restore code — it loads the **checkpoint summary** for that branch, giving it instant context on what was built and why. Need more detail? The `log` tool provides the complete conversation history on demand. Other tools restore files; Variantree restores *understanding*.
 
 #### `restore` — Rewind without losing your place
 
@@ -187,7 +191,18 @@ Opens the full React Flow web UI in your default browser, pre-loaded with your p
 
 #### `log` — Full conversation replay
 
-Retrieve the complete conversation history for any branch. Useful when the AI needs to recall a specific decision or re-read prior context without it being in the active context window.
+Retrieve the complete conversation history for any branch. This is the "deep dive" tool — when the AI needs to recall a specific decision or re-read prior context without it being in the active context window, it calls `log` on demand.
+
+#### `stats` — Token analytics and branching ROI
+
+Per-branch and session-level analytics: token usage (input, output, cache), cost estimation, model breakdown, and **linear vs. branched context savings**. Shows exactly how much context (and money) branching saves compared to a linear conversation.
+
+```
+Session Analytics
+  Total tokens: 45,200 (input: 38,100 | output: 7,100)
+  Estimated cost: $0.142
+  Token savings: Linear context: 98,400 → Branched: 41,200 (58.1% reduction)
+```
 
 The AI is instructed to use these proactively — after completing tasks, before risky changes, and whenever you ask to explore alternatives.
 
@@ -195,9 +210,17 @@ The AI is instructed to use these proactively — after completing tasks, before
 
 ## How context works
 
-When you branch or switch, Variantree doesn't just restore files — it reconstructs the full conversation ancestry for that branch and writes it to `.variantree/branch-context.md`. The AI reads this at the start of each session, so it always knows the history of the branch it's on, even after a restart.
+Variantree uses a **two-tier context system** designed to minimize token usage while preserving full traceability:
 
-Branches are linked: if `class-based` was created from `todo-basic` on `main`, the AI on `class-based` has access to all of `main`'s conversation up to `todo-basic`, plus everything that happened on `class-based` after.
+**Tier 1 — Summary (always injected, ~100 tokens)**
+When you checkpoint, the AI writes a concise summary of the work done. On branch switch, only this summary is injected into the conversation — not the full message history. This keeps context pollution minimal.
+
+**Tier 2 — Log (on demand, full history)**
+If the AI needs deeper context — why a decision was made, what was tried and failed — it calls the `log` tool to retrieve the complete conversation history for that branch.
+
+Branches are linked: if `class-based` was created from `todo-basic` on `main`, the AI on `class-based` has the summary from `main` up to `todo-basic`, plus everything that happened on `class-based` after. The full ancestry is always available via `log`.
+
+A `branch-context.md` file is also written to `.variantree/` so the AI picks up context automatically at session start.
 
 ---
 
@@ -225,6 +248,7 @@ variantree restore <label> # restore code to a checkpoint
 variantree tree            # show the branch/checkpoint tree (ASCII)
 variantree tree --web      # open interactive tree visualization in browser
 variantree log             # show conversation history
+variantree stats           # show token usage and branching analytics
 variantree init            # manually set up a project (usually not needed)
 ```
 
